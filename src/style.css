@@ -1,0 +1,120 @@
+/* SnapChart Pro — base styles */
+
+:root {
+  --royal:    #16317F;
+  --royal-2:  #1E44C4;
+  --green:    #2ECC71;
+  --ink:      #0F1830;
+  --slate:    #6B7280;
+  --chalk:    #E5E7EB;
+  --bad:      #DC2626;
+  --body:     "Inter", sans-serif;
+  --num:      "Oswald", sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: var(--body);
+  background: #F3F4F6;
+  color: var(--ink);
+}
+
+#app { min-height: 100vh; }
+
+/* ---- Logo ---- */
+.logo-snap  { font-family: var(--num); font-weight: 700; color: #fff; font-size: 1.5rem; letter-spacing: .02em; }
+.logo-chart { font-family: var(--num); font-weight: 700; color: var(--royal-2); font-size: 1.5rem; }
+.logo-pro   { font-family: var(--num); font-weight: 700; color: var(--green); font-size: 1rem;
+              background: rgba(46,204,113,.15); border: 1px solid var(--green);
+              border-radius: 5px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
+
+/* ---- Buttons ---- */
+.btn-primary {
+  background: var(--royal); color: #fff; border: none;
+  font-family: var(--num); font-size: 15px; font-weight: 600; letter-spacing: .04em;
+  padding: 10px 22px; border-radius: 9px; cursor: pointer; transition: background .15s;
+}
+.btn-primary:hover { background: var(--royal-2); }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+.btn-secondary {
+  background: #fff; color: var(--royal); border: 1.5px solid var(--royal);
+  font-family: var(--body); font-size: 14px; font-weight: 500;
+  padding: 7px 16px; border-radius: 8px; cursor: pointer;
+}
+.btn-secondary:hover { background: #EEF2FF; }
+
+.btn-ghost {
+  background: none; border: none; color: rgba(255,255,255,.75);
+  font-size: 13px; cursor: pointer; padding: 6px 10px; border-radius: 6px;
+}
+.btn-ghost:hover { color: #fff; background: rgba(255,255,255,.1); }
+
+/* ---- Auth screen ---- */
+.auth-wrap {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, var(--royal) 0%, #0d1f55 100%);
+  padding: 24px;
+}
+.auth-card {
+  background: #fff; border-radius: 16px; padding: 40px 36px;
+  width: 100%; max-width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,.25);
+}
+.auth-logo { text-align: center; margin-bottom: 6px; }
+.auth-logo .logo-snap, .auth-logo .logo-chart { color: var(--royal); }
+.auth-logo .logo-snap { font-size: 2rem; }
+.auth-logo .logo-chart { font-size: 2rem; }
+.auth-sub { text-align: center; color: var(--slate); font-size: 14px; margin-bottom: 28px; }
+
+.tab-row { display: flex; gap: 0; border: 1.5px solid var(--chalk); border-radius: 9px;
+           overflow: hidden; margin-bottom: 24px; }
+.tab-btn { flex: 1; background: none; border: none; padding: 9px; font-size: 14px;
+           font-weight: 500; cursor: pointer; color: var(--slate); }
+.tab-btn.active { background: var(--royal); color: #fff; }
+
+.form-field { margin-bottom: 16px; }
+.form-field label { display: block; font-size: 12px; font-weight: 600;
+                    color: var(--slate); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .05em; }
+.form-field input {
+  width: 100%; padding: 10px 12px; border: 1.5px solid var(--chalk);
+  border-radius: 8px; font-size: 15px; font-family: var(--body);
+  outline: none; transition: border-color .15s;
+}
+.form-field input:focus { border-color: var(--royal-2); }
+
+.auth-error {
+  background: #FEE2E2; color: var(--bad); border-radius: 8px;
+  padding: 10px 12px; font-size: 13px; margin-bottom: 14px;
+}
+
+#authForm .btn-primary { width: 100%; font-size: 16px; padding: 12px; margin-top: 4px; }
+
+.auth-footer { text-align: center; color: var(--slate); font-size: 12px; margin-top: 28px; }
+
+/* ---- Dashboard ---- */
+.dash-wrap { display: flex; flex-direction: column; min-height: 100vh; }
+
+.dash-header {
+  background: var(--royal); color: #fff;
+  padding: 14px 24px; display: flex; align-items: center;
+  justify-content: space-between;
+}
+.dash-header-right { display: flex; align-items: center; gap: 12px; }
+.coach-email { font-size: 13px; color: rgba(255,255,255,.7); }
+
+.dash-main { padding: 28px 24px; max-width: 900px; width: 100%; margin: 0 auto; flex: 1; }
+.dash-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.dash-top h2 { font-family: var(--num); font-size: 22px; color: var(--ink); }
+
+.game-list { display: flex; flex-direction: column; gap: 12px; }
+.game-card {
+  background: #fff; border-radius: 12px; padding: 16px 20px;
+  display: flex; align-items: center; gap: 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+}
+.game-card-name { font-family: var(--num); font-size: 17px; font-weight: 600; flex: 1; }
+.game-card-meta { font-size: 13px; color: var(--slate); flex: 1; }
+
+.loading, .empty-state { color: var(--slate); font-size: 14px; padding: 24px 0; text-align: center; }
