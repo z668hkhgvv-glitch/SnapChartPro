@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  base: "/SnapChartPro/",
+  base: process.env.GITHUB_PAGES ? "/SnapChartPro/" : "/",
   build: {
     outDir: "dist",
   },
