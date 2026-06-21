@@ -11,7 +11,13 @@ import { renderGame } from "./game.js";
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 export async function renderDashboard(container, user, teamId, userRole, onRefresh) {
-  const team     = await getTeam(teamId);
+  let team;
+  try {
+    team = await getTeam(teamId);
+  } catch (err) {
+    console.error("getTeam failed:", err);
+    team = null;
+  }
   const teamName = team?.name || "My Team";
   const isAdmin  = userRole === "admin";
   const canChart = userRole !== "readonly";
@@ -85,7 +91,15 @@ async function refreshGameList(container, user, teamId, userRole, onRefresh) {
   const list = document.getElementById("gameList");
   if (!list) return;
 
-  const games    = await getGames(teamId);
+  let games;
+  try {
+    games = await getGames(teamId);
+  } catch (err) {
+    console.error("getGames failed:", err);
+    list.innerHTML = `<div class="empty-state" style="color:#DC2626">Error loading games: ${esc(err.message)}</div>`;
+    return;
+  }
+
   const isAdmin  = userRole === "admin";
 
   if (!games.length) {
@@ -175,9 +189,14 @@ function showNewGameModal(container, user, teamId, userRole, onRefresh) {
       const date     = new Date().toLocaleDateString("en-US",
         { month: "short", day: "numeric", year: "numeric" });
       document.body.removeChild(overlay);
-      const gameId = await createGame(teamId, { opponent, date, mode });
-      loadGame(container, user, teamId, { id: gameId, opponent, date, mode },
-               userRole, onRefresh);
+      try {
+        const gameId = await createGame(teamId, { opponent, date, mode });
+        loadGame(container, user, teamId, { id: gameId, opponent, date, mode },
+                 userRole, onRefresh);
+      } catch (err) {
+        console.error("createGame failed:", err);
+        alert("Could not create game: " + err.message);
+      }
     });
   });
 

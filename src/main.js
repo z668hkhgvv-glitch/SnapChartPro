@@ -42,6 +42,8 @@ async function route(user) {
       }
     }
 
+    console.log("[SnapChart] route resolved:", { uid: user.uid, email: user.email, teamId, role });
+
     if (teamId) {
       renderDashboard(app, user, teamId, role, () => route(user));
     } else {
