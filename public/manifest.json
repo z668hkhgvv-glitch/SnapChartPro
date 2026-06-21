@@ -1,0 +1,13 @@
+{
+  "name": "SnapChart Pro",
+  "short_name": "SnapChart Pro",
+  "description": "Sideline play charting — Pro edition",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#16317F",
+  "theme_color": "#16317F",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

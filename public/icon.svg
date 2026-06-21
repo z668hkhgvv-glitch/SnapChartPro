@@ -1,0 +1,8 @@
+<svg width="512" height="512" viewBox="0 0 512 512" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>SnapChart Pro</title>
+<rect x="0" y="0" width="512" height="512" rx="112" fill="#16317f"/>
+<rect x="142" y="232" width="60" height="128" rx="12" fill="#ffffff"/>
+<rect x="226" y="180" width="60" height="180" rx="12" fill="#ffffff"/>
+<rect x="310" y="120" width="60" height="240" rx="12" fill="#ffffff"/>
+<path d="M306 112 L330 140 L382 76" fill="none" stroke="#F59E0B" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

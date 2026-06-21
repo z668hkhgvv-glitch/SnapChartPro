@@ -5,10 +5,16 @@ export function renderLogin(container) {
     <div class="auth-wrap">
       <div class="auth-card">
         <div class="auth-logo">
-          <span class="logo-snap">Snap</span><span class="logo-chart">Chart</span>
-          <span class="logo-pro">PRO</span>
+          <svg width="560" height="160" viewBox="0 0 560 160" xmlns="http://www.w3.org/2000/svg" aria-label="SnapChart Pro" role="img" style="width:100%;max-width:340px;height:auto;display:block;margin:0 auto 4px">
+            <rect x="20" y="34" width="92" height="92" rx="20" fill="#16317f"/>
+            <rect x="38" y="80" width="15" height="28" rx="3" fill="#ffffff"/>
+            <rect x="59" y="66" width="15" height="42" rx="3" fill="#ffffff"/>
+            <rect x="80" y="50" width="15" height="58" rx="3" fill="#ffffff"/>
+            <path d="M79 44 l5 6 l12 -15" fill="none" stroke="#F59E0B" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+            <text x="132" y="92" font-size="46" font-family="Oswald,'Arial Narrow',sans-serif" font-weight="700"><tspan fill="#16317f">Snap</tspan><tspan fill="#1e44c4">Chart</tspan><tspan fill="#F59E0B" font-size="36"> Pro</tspan></text>
+            <text x="134" y="118" font-size="14" font-family="Oswald,'Arial Narrow',sans-serif" font-weight="600" letter-spacing="0.6" fill="#6b7280">Sideline play charting &#8212; Pro edition</text>
+          </svg>
         </div>
-        <p class="auth-sub">Shared play charting for your entire staff</p>
 
         <div class="tab-row">
           <button class="tab-btn active" data-tab="login">Sign In</button>
