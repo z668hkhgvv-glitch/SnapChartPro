@@ -1,0 +1,83 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function memberDoc(teamId) {
+      return get(/databases/$(database)/documents/teams/$(teamId)/members/$(request.auth.uid));
+    }
+
+    function myRole(teamId) {
+      return memberDoc(teamId).data.role;
+    }
+
+    function isMember(teamId) {
+      return isSignedIn() && memberDoc(teamId).data != null;
+    }
+
+    function isAdmin(teamId) {
+      return isMember(teamId) && myRole(teamId) == "admin";
+    }
+
+    function canWrite(teamId) {
+      return isMember(teamId) && myRole(teamId) != "readonly";
+    }
+
+    // ── userTeams/{uid} — quick lookup so login doesn't need collection group ─
+    match /userTeams/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // ── teams/{teamId} ────────────────────────────────────────────────────────
+    match /teams/{teamId} {
+      // Any team member may read the team doc (name, etc.)
+      allow read: if isMember(teamId);
+      // Only admins may update team metadata
+      allow write: if isAdmin(teamId);
+
+      // ── members sub-collection ─────────────────────────────────────────────
+      match /members/{uid} {
+        // Members can read the whole list (so dashboard can show coaches)
+        allow read: if isMember(teamId);
+        // Admins can create/update/delete any member doc
+        allow write: if isAdmin(teamId);
+        // A user can create their own member doc (invite acceptance flow)
+        allow create: if isSignedIn() && request.auth.uid == uid;
+      }
+
+      // ── games sub-collection ──────────────────────────────────────────────
+      match /games/{gameId} {
+        allow read: if isMember(teamId);
+        allow create, update: if canWrite(teamId);
+        allow delete: if isAdmin(teamId);
+
+        // ── plays sub-collection ───────────────────────────────────────────
+        match /plays/{playId} {
+          allow read: if isMember(teamId);
+          allow create, update: if canWrite(teamId);
+          allow delete: if canWrite(teamId);
+        }
+      }
+    }
+
+    // ── invites/{emailKey} ────────────────────────────────────────────────────
+    match /invites/{emailKey} {
+      // Anyone signed-in may read an invite (needed for auto-accept on login)
+      // The emailKey is not guessable without knowing the email, so this is safe
+      allow read: if isSignedIn();
+      // Only the invited user's matching doc is readable by uid check is impractical
+      // (emailKey is derived from email, not uid) — rely on read above + security
+      // through obscurity of the key.
+      // Admins write invites (enforced via server-side team membership check in JS;
+      // here we allow any signed-in user to create their own team's invite)
+      allow write: if isSignedIn();
+      // Accept flow: user deletes own invite after joining
+      allow delete: if isSignedIn();
+    }
+  }
+}

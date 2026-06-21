@@ -396,3 +396,78 @@ tbody tr[data-id]:hover { background: #f8f9ff; }
 .split .line:first-of-type { border-top: none; }
 .split .line b { font-family: var(--num); font-weight: 600; }
 @media(max-width:600px){ .splits{ grid-template-columns: 1fr; } }
+
+/* ── Role badges ──────────────────────────────────────────────────────────── */
+.role-badge {
+  display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; padding: 3px 9px; border-radius: 20px;
+}
+.role-badge.role-admin    { background: rgba(245,158,11,.15); color: #b45309; border: 1px solid rgba(245,158,11,.35); }
+.role-badge.role-editor   { background: rgba(30, 68,196,.1);  color: var(--royal-2); border: 1px solid rgba(30,68,196,.25); }
+.role-badge.role-readonly { background: rgba(107,114,128,.1); color: var(--slate);   border: 1px solid rgba(107,114,128,.25); }
+
+/* ── Settings modal ───────────────────────────────────────────────────────── */
+.settings-modal { max-width: 560px; max-height: 90vh; overflow-y: auto; }
+.settings-section {
+  border-bottom: 1px solid var(--chalk); padding: 16px 0;
+}
+.settings-label {
+  font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--slate); margin-bottom: 10px;
+}
+
+/* ── Member rows ──────────────────────────────────────────────────────────── */
+.member-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid var(--chalk);
+}
+.member-row:last-child { border-bottom: none; }
+.member-email {
+  flex: 1; font-size: 14px; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.you-tag {
+  display: inline-block; font-size: 10px; font-weight: 700; color: var(--royal);
+  background: #EEF2FF; border-radius: 4px; padding: 1px 5px; margin-left: 5px;
+  vertical-align: middle;
+}
+.role-sel {
+  padding: 5px 8px; border: 1.5px solid var(--chalk); border-radius: 7px;
+  font-family: var(--body); font-size: 13px; color: var(--ink); background: #fff;
+  cursor: pointer;
+}
+.role-sel:focus { outline: 2px solid var(--royal); outline-offset: 2px; border-color: var(--royal); }
+
+/* ── Icon buttons (× close/remove) ───────────────────────────────────────── */
+.icon-btn {
+  background: none; border: none; font-size: 18px; line-height: 1;
+  color: var(--slate); cursor: pointer; padding: 4px 6px; border-radius: 6px;
+  flex-shrink: 0;
+}
+.icon-btn:hover { color: #b91c1c; background: #fbe8e8; }
+
+/* ── Remove member button ─────────────────────────────────────────────────── */
+.remove-member { font-size: 18px; }
+
+/* ── Onboarding screen ────────────────────────────────────────────────────── */
+.onboard-options {
+  display: flex; flex-direction: column; gap: 0;
+}
+.onboard-or {
+  text-align: center; font-size: 12px; color: var(--slate); text-transform: uppercase;
+  letter-spacing: .06em; padding: 10px 0; position: relative;
+}
+.onboard-or::before, .onboard-or::after {
+  content: ""; position: absolute; top: 50%; width: 40%;
+  height: 1px; background: var(--chalk);
+}
+.onboard-or::before { left: 0; }
+.onboard-or::after  { right: 0; }
+.onboard-wait {
+  background: #F9FAFB; border: 1.5px solid var(--chalk); border-radius: 10px;
+  padding: 14px 16px;
+}
+
+/* ── Readonly cursor hint on play rows ────────────────────────────────────── */
+.readonly-rows tbody tr[data-id] { cursor: default; }
+.succ.static { cursor: default; pointer-events: none; }

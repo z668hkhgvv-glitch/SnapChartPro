@@ -106,12 +106,17 @@ function advanceBallOn(ylStr, yards) {
 
 // ---------- public entry point -----------------------------------------------
 
-export function renderGame(container, user, teamId, game, onBack) {
+export function renderGame(container, user, teamId, game, userRole, onBack) {
   // Per-render state
   let plays = [];
   let editingId = null;
   let unsub = null;
   let penaltyPendingPlay = null;
+
+  // Role gates
+  const canChart  = userRole !== "readonly";   // add & edit plays
+  const canDelete = userRole !== "readonly";   // delete individual plays
+  // (deleting games is admin-only, enforced in dashboard)
 
   const mode = game.mode || "standard";
   const is7   = mode === "7v7";
@@ -140,6 +145,14 @@ export function renderGame(container, user, teamId, game, onBack) {
   };
 
   container.innerHTML = buildHTML(game, mode);
+
+  // Readonly users: hide entry form, mark table as non-interactive
+  if (!canChart) {
+    const entrySection = container.querySelector(".entry");
+    if (entrySection) entrySection.style.display = "none";
+    const tbl = container.querySelector("table");
+    if (tbl) tbl.classList.add("readonly-rows");
+  }
 
   // ---- back button ----
   document.getElementById("gameBackBtn").addEventListener("click", () => {
@@ -551,6 +564,7 @@ export function renderGame(container, user, teamId, game, onBack) {
   }
 
   function startEdit(id) {
+    if (!canChart) return;
     const p = plays.find((x) => x.id === id);
     if (!p) return;
     editingId = id;
@@ -739,6 +753,7 @@ export function renderGame(container, user, teamId, game, onBack) {
 
   document.getElementById("logBody").addEventListener("click", (e) => {
     if (e.target.closest(".del") || e.target.closest(".succ")) return;
+    if (!canChart) return;
     const tr = e.target.closest("tr[data-id]");
     if (!tr) return;
     startEdit(tr.getAttribute("data-id"));
@@ -767,21 +782,27 @@ export function renderGame(container, user, teamId, game, onBack) {
           `</td>` +
           `<td>${esc(p.call || "—")}</td>` +
           `<td><span class="res ${dir}">${sign}${p.yards}</span></td>` +
-          `<td><button class="succ ${p.success ? "y" : "n"}" data-id="${esc(p.id)}">${p.success ? "✓" : "✗"}</button></td>` +
+          (canChart
+            ? `<td><button class="succ ${p.success ? "y" : "n"}" data-id="${esc(p.id)}">${p.success ? "✓" : "✗"}</button></td>`
+            : `<td><span class="${p.success ? "succ y static" : "succ n static"}">${p.success ? "✓" : "✗"}</span></td>`) +
           `<td><div class="tagrow">${tags || '<span style="color:var(--muted)">—</span>'}</div></td>` +
           `<td>${p.note ? `<span title="${esc(p.note)}" style="cursor:help">📝</span>` : '<span style="color:var(--muted)">—</span>'}</td>` +
-          `<td><button class="del" data-del="${esc(p.id)}" title="Delete">&times;</button></td>` +
+          (canDelete ? `<td><button class="del" data-del="${esc(p.id)}" title="Delete">&times;</button></td>` : "<td></td>") +
         `</tr>`;
       }).join("");
     }
 
     // Wire .succ and .del buttons
-    Array.from(body.querySelectorAll(".succ")).forEach((b) => {
-      b.onclick = () => handleToggleSuccess(b.getAttribute("data-id"));
-    });
-    Array.from(body.querySelectorAll(".del")).forEach((b) => {
-      b.onclick = () => handleDelete(b.getAttribute("data-del"));
-    });
+    if (canChart) {
+      Array.from(body.querySelectorAll(".succ")).forEach((b) => {
+        b.onclick = () => handleToggleSuccess(b.getAttribute("data-id"));
+      });
+    }
+    if (canDelete) {
+      Array.from(body.querySelectorAll(".del")).forEach((b) => {
+        b.onclick = () => handleDelete(b.getAttribute("data-del"));
+      });
+    }
   }
 
   function renderStats() {
