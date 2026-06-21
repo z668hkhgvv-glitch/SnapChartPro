@@ -417,6 +417,24 @@ tbody tr[data-id]:hover { background: #f8f9ff; }
   color: var(--slate); margin-bottom: 10px;
 }
 
+/* ── Charting defaults grid ───────────────────────────────────────────────── */
+.chart-defaults-grid {
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 8px 12px; align-items: center;
+}
+.chart-defaults-grid label {
+  font-size: 13px; color: var(--ink);
+}
+.chart-defaults-grid input[type="number"] {
+  width: 72px; padding: 6px 10px;
+  border: 2px solid var(--chalk); border-radius: 8px;
+  font-size: 14px; font-family: var(--body);
+  text-align: right;
+}
+.chart-defaults-grid input[type="number"]:focus {
+  outline: none; border-color: var(--royal);
+}
+
 /* ── Member rows ──────────────────────────────────────────────────────────── */
 .member-row {
   display: flex; align-items: center; gap: 10px;

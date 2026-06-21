@@ -145,8 +145,13 @@ async function refreshGameList(container, user, teamId, userRole, onRefresh) {
   }
 }
 
-function loadGame(container, user, teamId, game, userRole, onRefresh) {
-  renderGame(container, user, teamId, game, userRole, () =>
+async function loadGame(container, user, teamId, game, userRole, onRefresh) {
+  let teamSettings = {};
+  try {
+    const t = await getTeam(teamId);
+    teamSettings = t?.settings || {};
+  } catch (_) {}
+  renderGame(container, user, teamId, game, userRole, teamSettings, () =>
     renderDashboard(container, user, teamId, userRole, onRefresh)
   );
 }
@@ -235,6 +240,36 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
         <div id="membersList"><div class="loading">Loading&hellip;</div></div>
       </div>
 
+      <div class="settings-section">
+        <div class="settings-label">Charting Defaults</div>
+        <div class="chart-defaults-grid">
+          <label>Default yards to go</label>
+          <input id="cfgDist" type="number" min="1" max="99" value="${team?.settings?.defaultDist ?? 10}">
+
+          <label>Scrimmage plays/series</label>
+          <input id="cfgScrimmPlays" type="number" min="1" max="50" value="${team?.settings?.scrimmPlays ?? 10}">
+
+          <label>Effective: scrimmage (yds)</label>
+          <input id="cfgEffScrim" type="number" min="0" max="99" value="${team?.settings?.effScrim ?? 5}">
+
+          <label>Effective: 1st down (yds)</label>
+          <input id="cfgEff1" type="number" min="0" max="99" value="${team?.settings?.effStd1 ?? 5}">
+
+          <label>Effective: 2nd down (%&nbsp;of dist)</label>
+          <input id="cfgEff2" type="number" min="0" max="100" value="${team?.settings?.effStd2 ?? 50}">
+
+          <label>Effective: 3rd down (%&nbsp;of dist)</label>
+          <input id="cfgEff3" type="number" min="0" max="100" value="${team?.settings?.effStd3 ?? 100}">
+
+          <label>Effective: 4th down (%&nbsp;of dist)</label>
+          <input id="cfgEff4" type="number" min="0" max="100" value="${team?.settings?.effStd4 ?? 100}">
+        </div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
+          <button class="btn-secondary" id="saveChartDefaultsBtn">Save Defaults</button>
+          <span id="chartDefaultsMsg" style="font-size:12px;display:none"></span>
+        </div>
+      </div>
+
       <div class="settings-section" style="border-bottom:none;padding-bottom:0">
         <div class="settings-label">Invite a Coach</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -281,6 +316,35 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
       msgEl.style.color = "#DC2626";
       msgEl.textContent = "Error: " + err.message;
       msgEl.style.display = "block";
+    }
+  });
+
+  // Save charting defaults
+  overlay.querySelector("#saveChartDefaultsBtn").addEventListener("click", async () => {
+    const msgEl = overlay.querySelector("#chartDefaultsMsg");
+    const num = (id, fallback) => {
+      const v = parseInt(overlay.querySelector(id).value, 10);
+      return isNaN(v) ? fallback : v;
+    };
+    const settings = {
+      defaultDist:  num("#cfgDist", 10),
+      scrimmPlays:  num("#cfgScrimmPlays", 10),
+      effScrim:     num("#cfgEffScrim", 5),
+      effStd1:      num("#cfgEff1", 5),
+      effStd2:      num("#cfgEff2", 50),
+      effStd3:      num("#cfgEff3", 100),
+      effStd4:      num("#cfgEff4", 100),
+    };
+    try {
+      await updateTeam(teamId, { settings });
+      msgEl.style.color = "#15803d";
+      msgEl.textContent = "Saved.";
+      msgEl.style.display = "inline";
+      setTimeout(() => { msgEl.style.display = "none"; }, 2000);
+    } catch (err) {
+      msgEl.style.color = "#DC2626";
+      msgEl.textContent = "Error: " + err.message;
+      msgEl.style.display = "inline";
     }
   });
 

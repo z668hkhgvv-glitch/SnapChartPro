@@ -106,7 +106,7 @@ function advanceBallOn(ylStr, yards) {
 
 // ---------- public entry point -----------------------------------------------
 
-export function renderGame(container, user, teamId, game, userRole, onBack) {
+export function renderGame(container, user, teamId, game, userRole, teamSettings, onBack) {
   // Per-render state
   let plays = [];
   let editingId = null;
@@ -123,8 +123,13 @@ export function renderGame(container, user, teamId, game, userRole, onBack) {
   const isScrim = mode === "scrimmage";
 
   const settings = {
-    effStd1: 5, effStd2: 50, effStd3: 100, effStd4: 100,
-    effScrim: 5, defaultDist: 10, scrimmPlays: 10,
+    effStd1:     teamSettings?.effStd1     ?? 5,
+    effStd2:     teamSettings?.effStd2     ?? 50,
+    effStd3:     teamSettings?.effStd3     ?? 100,
+    effStd4:     teamSettings?.effStd4     ?? 100,
+    effScrim:    teamSettings?.effScrim    ?? 5,
+    defaultDist: teamSettings?.defaultDist ?? 10,
+    scrimmPlays: teamSettings?.scrimmPlays ?? 10,
   };
 
   // Draft holds the in-progress form values that are NOT simple text inputs.
