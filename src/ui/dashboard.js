@@ -793,6 +793,7 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
     nameBtn.style.color      = !byNum ? "#fff"         : "";
     nameBtn.style.borderColor= !byNum ? "var(--royal)" : "";
   }
+  let editingRosterPlayerId = null;
   function renderRosterListDash() {
     const listEl = overlay.querySelector("#rosterList");
     if (!listEl) return;
@@ -801,13 +802,24 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
       listEl.innerHTML = '<div style="font-size:13px;color:var(--slate);padding:6px 0">No players yet.</div>';
       return;
     }
-    listEl.innerHTML = sortedLocalRoster().map(p => `
-      <div class="roster-player">
-        <span class="roster-jersey">#${esc(p.jersey)}</span>
-        <span class="roster-name">${esc(p.name)}</span>
-        <span class="roster-pos">${esc(p.pos)}</span>
-        <button class="modal-cancel" style="margin:0;font-size:18px;line-height:1;padding:0 6px" data-del-player="${esc(p.id)}">&times;</button>
-      </div>`).join("");
+    listEl.innerHTML = sortedLocalRoster().map(p => {
+      if (p.id === editingRosterPlayerId) {
+        return `<div class="roster-player" style="flex-wrap:wrap;gap:4px">
+        <input id="editRJersey" class="field" value="${esc(p.jersey)}" placeholder="#" style="width:48px;height:34px;font-size:13px;padding:0 6px">
+        <input id="editRName" class="field" value="${esc(p.name)}" placeholder="Name" style="flex:1;min-width:80px;height:34px;font-size:13px;padding:0 8px">
+        <input id="editRPos" class="field" value="${esc(p.pos)}" placeholder="Pos" style="width:44px;height:34px;font-size:13px;padding:0 6px">
+        <button class="btn-primary" data-save-roster="${esc(p.id)}" style="height:34px;padding:0 12px;font-size:12px;flex-shrink:0">Save</button>
+        <button class="modal-cancel" data-cancel-roster-edit style="margin:0;height:34px;padding:0 8px;flex-shrink:0">✕</button>
+      </div>`;
+      }
+      return `<div class="roster-player">
+      <span class="roster-jersey">#${esc(p.jersey)}</span>
+      <span class="roster-name">${esc(p.name)}</span>
+      <span class="roster-pos">${esc(p.pos)}</span>
+      <button class="lib-edit-btn" data-edit-roster="${esc(p.id)}" title="Edit" style="flex-shrink:0">✎</button>
+      <button class="modal-cancel" style="margin:0;font-size:18px;line-height:1;padding:0 6px" data-del-player="${esc(p.id)}">&times;</button>
+    </div>`;
+    }).join("");
   }
   renderRosterListDash();
 
@@ -833,6 +845,35 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
   });
 
   overlay.querySelector("#rosterList").addEventListener("click", e => {
+    // Edit player
+    const editBtn = e.target.closest("[data-edit-roster]");
+    if (editBtn) {
+      editingRosterPlayerId = editBtn.getAttribute("data-edit-roster");
+      renderRosterListDash();
+      const inp = overlay.querySelector("#editRName"); if (inp) inp.focus();
+      return;
+    }
+    // Save player edit
+    const saveBtn = e.target.closest("[data-save-roster]");
+    if (saveBtn) {
+      const pid = saveBtn.getAttribute("data-save-roster");
+      const jersey = (overlay.querySelector("#editRJersey")?.value || "").replace(/^#/, "");
+      const name = (overlay.querySelector("#editRName")?.value || "").trim();
+      const pos = (overlay.querySelector("#editRPos")?.value || "").trim();
+      if (name) {
+        const idx = localRoster.findIndex(r => r.id === pid);
+        if (idx >= 0) localRoster[idx] = { id: pid, name, jersey, pos };
+      }
+      editingRosterPlayerId = null;
+      renderRosterListDash();
+      return;
+    }
+    // Cancel edit
+    if (e.target.closest("[data-cancel-roster-edit]")) {
+      editingRosterPlayerId = null;
+      renderRosterListDash();
+      return;
+    }
     const btn = e.target.closest("[data-del-player]");
     if (!btn) return;
     const id = btn.getAttribute("data-del-player");

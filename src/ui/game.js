@@ -854,6 +854,61 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       }
     }
 
+    // Player stats (only when tracking enabled)
+    if (teamSettings.trackPlayers && (teamSettings.roster || []).length) {
+      const rosterMap = {};
+      (teamSettings.roster || []).forEach(r => rosterMap[r.id] = r);
+
+      const passerStats = {}, receiverStats = {}, rusherStats = {};
+      plays.forEach(p => {
+        const addStat = (pid, bucket) => {
+          if (!pid || !rosterMap[pid]) return;
+          if (!bucket[pid]) bucket[pid] = {id: pid, n: 0, yds: 0, eff: 0};
+          bucket[pid].n++;
+          bucket[pid].yds += Number(p.yards) || 0;
+          if (p.success) bucket[pid].eff++;
+        };
+        addStat(p.passer, passerStats);
+        addStat(p.receiver, receiverStats);
+        addStat(p.rusher, rusherStats);
+      });
+
+      const playerRow = (stat, countLabel) => {
+        const pl = rosterMap[stat.id];
+        const rate = stat.n ? Math.round(100 * stat.eff / stat.n) : 0;
+        const avgY = stat.n ? (stat.yds / stat.n).toFixed(1) : "0.0";
+        return `<div class="rpt-row">
+          <div class="rpt-label"><b>#${esc(pl.jersey)}</b> ${esc(pl.name)}${pl.pos ? ` <span style="font-size:11px;color:var(--slate)">${esc(pl.pos)}</span>` : ""}</div>
+          <div class="rpt-stats">
+            <span class="rpt-n">${stat.n} ${countLabel}</span>
+            <span class="rpt-avg">${stat.yds} yds &middot; ${avgY} avg</span>
+            <span class="rpt-eff" style="color:${rate >= 50 ? "#15803d" : "#b91c1c"}">${rate}% eff</span>
+          </div>
+          <div class="rpt-bar-wrap"><div class="rpt-bar" style="width:${rate}%"></div></div>
+        </div>`;
+      };
+
+      const subHead = (label) =>
+        `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--slate);margin:8px 0 6px">${label}</div>`;
+
+      const hasPStats = Object.keys(passerStats).length || Object.keys(receiverStats).length || Object.keys(rusherStats).length;
+      if (hasPStats) {
+        html += secHead("Player Stats");
+        if (Object.keys(passerStats).length) {
+          html += subHead("Passers");
+          html += Object.values(passerStats).sort((a,b) => b.yds - a.yds).map(s => playerRow(s, "att")).join("");
+        }
+        if (Object.keys(receiverStats).length) {
+          html += subHead("Receivers");
+          html += Object.values(receiverStats).sort((a,b) => b.yds - a.yds).map(s => playerRow(s, "rec")).join("");
+        }
+        if (Object.keys(rusherStats).length) {
+          html += subHead("Rushers");
+          html += Object.values(rusherStats).sort((a,b) => b.yds - a.yds).map(s => playerRow(s, "car")).join("");
+        }
+      }
+    }
+
     return html + "</div>";
   }
 
@@ -1580,7 +1635,50 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
         <td><span class="succ ${p.success ? "y" : "n"} static">${p.success ? "✓" : "✗"}</span></td>
       </tr>`;
     }).join("");
-    return statsHtml + `<div class="table-scroll"><table><thead><tr>
+    // By Player breakdown
+    let playerSection = "";
+    if (teamSettings.trackPlayers && (teamSettings.roster || []).length) {
+      const rMap = {};
+      (teamSettings.roster || []).forEach(r => rMap[r.id] = r);
+      const byPlayer = {};
+      matching.forEach(p => {
+        const addStat = (pid, role) => {
+          if (!pid || !rMap[pid]) return;
+          const k = `${pid}|${role}`;
+          if (!byPlayer[k]) byPlayer[k] = {id: pid, role, n: 0, yds: 0, eff: 0};
+          byPlayer[k].n++;
+          byPlayer[k].yds += Number(p.yards) || 0;
+          if (p.success) byPlayer[k].eff++;
+        };
+        addStat(p.passer, "Passer");
+        addStat(p.receiver, "Receiver");
+        addStat(p.rusher, "Rusher");
+      });
+      const playerRows = Object.values(byPlayer).sort((a, b) => {
+        const ae = a.n ? a.eff/a.n : 0, be = b.n ? b.eff/b.n : 0; return be - ae;
+      });
+      if (playerRows.length) {
+        playerSection = `<div style="margin-bottom:16px">
+          <div style="font-family:var(--num,Oswald);text-transform:uppercase;letter-spacing:.06em;font-size:11px;font-weight:700;color:var(--royal,#16317F);padding:4px 0 5px;border-bottom:2px solid var(--chalk,#E8EEF9);margin-bottom:10px">By Player</div>` +
+          playerRows.map(s => {
+            const pl = rMap[s.id];
+            const rate = s.n ? Math.round(100 * s.eff / s.n) : 0;
+            const avgY = s.n ? (s.yds / s.n).toFixed(1) : "0.0";
+            return `<div class="rpt-row">
+              <div class="rpt-label"><b>#${esc(pl.jersey)}</b> ${esc(pl.name)} <span style="font-size:11px;color:var(--slate)">${s.role}</span></div>
+              <div class="rpt-stats">
+                <span class="rpt-n">${s.n} plays</span>
+                <span class="rpt-avg">${s.yds} yds &middot; ${avgY} avg</span>
+                <span class="rpt-eff" style="color:${rate >= 50 ? "#15803d" : "#b91c1c"}">${rate}% eff</span>
+              </div>
+              <div class="rpt-bar-wrap"><div class="rpt-bar" style="width:${rate}%"></div></div>
+            </div>`;
+          }).join("") +
+        `</div>`;
+      }
+    }
+
+    return statsHtml + playerSection + `<div class="table-scroll"><table><thead><tr>
       <th>#</th><th>Qtr/Ser</th><th>Dn &amp; Dist</th><th>Ball On</th><th>Formation</th><th>Tags</th><th>Yds</th><th>Eff</th>
     </tr></thead><tbody>${rows}</tbody></table></div>`;
   }
