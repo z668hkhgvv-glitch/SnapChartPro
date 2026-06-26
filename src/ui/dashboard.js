@@ -266,7 +266,23 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
     roster: team?.roster || [],
     rosterSort: team?.rosterSort || "number",
     library: team?.library || { forms:[], calls:[], motions:[], fronts:[], coverages:[] },
+    coachName: team?.coachName || "",
   };
+  const ACCENT_COLORS = [
+    '#16317F','#1E44C4','#C92828','#D97706',
+    '#15803D','#0E7B6C','#6D3EC4','#BE185D',
+    '#0369A1','#374151','#7C3AED','#B45309',
+    '#047857','#DC2626','#1D4ED8','#9333EA',
+  ];
+  const currentAccent   = teamSettings.accentColor   || '#16317F';
+  const currentMode     = teamSettings.defaultMode    || 'standard';
+  const currentStart7v7 = teamSettings.start7v7       ?? 40;
+  const currentLine1    = teamSettings.line1_7v7      ?? 20;
+  const currentLine2    = teamSettings.line2_7v7      ?? 5;
+  const currentPlays7v7 = teamSettings.playsPerSeries7v7 ?? 4;
+  const currentEff7v7   = teamSettings.eff7v7Mode     || 'pace';
+  const currentScrimMode = teamSettings.scrimmageMode || 'advance';
+  const currentScrimPlaysEff = teamSettings.effScrimPlays ?? (teamSettings.scrimmPlays ?? 10);
   const LIB_CATS_PRO = [
     {key:"forms",    label:"Formations"},
     {key:"calls",    label:"Play Calls"},
@@ -292,7 +308,99 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
                         border-radius:8px;font-size:15px;font-family:var(--body)">
           <button class="btn-secondary" id="saveTeamNameBtn">Save</button>
         </div>
+        <div style="margin-top:10px">
+          <label style="font-size:14px;color:var(--slate);display:block;margin-bottom:4px">Coach Name</label>
+          <input id="coachNameField" type="text" value="${esc(teamSettings.coachName)}"
+                 placeholder="Head coach name"
+                 style="width:100%;box-sizing:border-box;padding:9px 12px;border:2px solid #E5E7EB;
+                        border-radius:8px;font-size:14px;font-family:var(--body)">
+        </div>
         <div id="teamNameMsg" style="font-size:12px;margin-top:4px;display:none"></div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">Default Game Mode</div>
+        <div style="display:flex;gap:0;border:2px solid #E5E7EB;border-radius:8px;overflow:hidden;width:fit-content">
+          ${['standard','7v7','scrimmage'].map(m => {
+            const labels = { standard:'Standard', '7v7':'7v7', scrimmage:'Scrimmage' };
+            return `<button class="mode-seg-btn${m === currentMode ? ' mode-seg-active' : ''}"
+                            data-mode="${m}"
+                            style="padding:8px 18px;font-size:14px;border:none;cursor:pointer;
+                                   font-family:var(--body);
+                                   background:${m === currentMode ? '#16317F' : '#fff'};
+                                   color:${m === currentMode ? '#fff' : '#374151'}">${labels[m]}</button>`;
+          }).join('')}
+        </div>
+        <input type="hidden" id="defaultModeVal" value="${esc(currentMode)}">
+        <div style="margin-top:8px;display:flex;align-items:center;gap:10px">
+          <button class="btn-secondary" id="saveGameModeBtn">Save</button>
+          <span id="gameModeMsg" style="font-size:12px;display:none"></span>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">Team Accent Color</div>
+        <div id="accentColorGrid" style="display:grid;grid-template-columns:repeat(8,28px);gap:8px;margin-bottom:10px">
+          ${ACCENT_COLORS.map(c => `
+            <button class="accent-swatch${c === currentAccent ? ' accent-selected' : ''}"
+                    data-color="${c}"
+                    title="${c}"
+                    style="width:24px;height:24px;border-radius:50%;background:${c};cursor:pointer;
+                           border:${c === currentAccent ? '3px solid #111' : '2px solid transparent'};
+                           box-shadow:${c === currentAccent ? '0 0 0 2px #fff inset' : 'none'};
+                           padding:0;outline:none"></button>`).join('')}
+        </div>
+        <input type="hidden" id="accentColorVal" value="${esc(currentAccent)}">
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="btn-secondary" id="saveAccentColorBtn">Save</button>
+          <span id="accentColorMsg" style="font-size:12px;display:none"></span>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3 style="margin:0 0 12px;font-size:15px">7v7 Settings</h3>
+        <div class="chart-defaults-grid">
+          <label>Starting Position (yd)</label>
+          <input id="cfg7vStart" type="number" min="1" max="99" value="${currentStart7v7}">
+
+          <label>Line 1 (yd)</label>
+          <input id="cfg7vLine1" type="number" min="1" max="99" value="${currentLine1}">
+
+          <label>Line 2 (yd)</label>
+          <input id="cfg7vLine2" type="number" min="1" max="99" value="${currentLine2}">
+
+          <label>Plays per Series</label>
+          <input id="cfg7vPlays" type="number" min="1" max="20" value="${currentPlays7v7}">
+
+          <label>Effectiveness Mode</label>
+          <select id="cfg7vEff" class="role-sel">
+            <option value="pace"   ${currentEff7v7 === 'pace'   ? 'selected' : ''}>Pace (any 1st down = effective)</option>
+            <option value="strict" ${currentEff7v7 === 'strict' ? 'selected' : ''}>Strict (must advance the line)</option>
+          </select>
+        </div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
+          <button class="btn-secondary" id="save7v7Btn">Save 7v7 Settings</button>
+          <span id="v7Msg" style="font-size:12px;display:none"></span>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3 style="margin:0 0 12px;font-size:15px">Scrimmage Settings</h3>
+        <div class="chart-defaults-grid">
+          <label>Ball Movement</label>
+          <select id="cfgScrimMode" class="role-sel">
+            <option value="advance"   ${currentScrimMode === 'advance'   ? 'selected' : ''}>Advance (ball moves after each series)</option>
+            <option value="fixed"     ${currentScrimMode === 'fixed'     ? 'selected' : ''}>Fixed (ball stays at starting spot)</option>
+            <option value="simulated" ${currentScrimMode === 'simulated' ? 'selected' : ''}>Simulated (game-like with downs)</option>
+          </select>
+
+          <label>Plays per Series</label>
+          <input id="cfgEffScrimPlays" type="number" min="1" max="50" value="${currentScrimPlaysEff}">
+        </div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
+          <button class="btn-secondary" id="saveScrimBtn">Save Scrimmage Settings</button>
+          <span id="scrimMsg" style="font-size:12px;display:none"></span>
+        </div>
       </div>
 
       <div class="settings-section">
@@ -397,6 +505,16 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
         </div>
       </div>
 
+      <div class="settings-section" style="border-bottom:none;padding-bottom:0;margin-top:4px">
+        <hr style="margin:18px 0;border:none;border-top:1px solid var(--chalk)">
+        <h3 style="margin:0 0 8px;font-size:15px">Export Data</h3>
+        <p style="font-size:13px;color:var(--slate);margin:0 0 12px">Download all games and settings as a JSON file for backup or external analysis.</p>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="btn-secondary" id="exportJsonBtn">Export Team Data (JSON)</button>
+          <span id="exportMsg" style="font-size:12px;display:none"></span>
+        </div>
+      </div>
+
       <button class="modal-cancel" id="settingsClose" style="margin-top:16px">Close</button>
     </div>
   `;
@@ -409,13 +527,14 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
     if (e.target === overlay) document.body.removeChild(overlay);
   });
 
-  // Save team name
+  // Save team name + coach name
   overlay.querySelector("#saveTeamNameBtn").addEventListener("click", async () => {
-    const name  = overlay.querySelector("#teamNameField").value.trim();
-    const msgEl = overlay.querySelector("#teamNameMsg");
+    const name      = overlay.querySelector("#teamNameField").value.trim();
+    const coachName = overlay.querySelector("#coachNameField").value.trim();
+    const msgEl     = overlay.querySelector("#teamNameMsg");
     if (!name) return;
     try {
-      await updateTeam(teamId, { name });
+      await updateTeam(teamId, { name, coachName });
       const hdr = document.getElementById("headerTeamName");
       if (hdr) hdr.textContent = name;
       msgEl.style.color = "#15803d";
@@ -427,6 +546,160 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
       msgEl.textContent = "Error: " + err.message;
       msgEl.style.display = "block";
     }
+  });
+
+  // Default game mode segmented control
+  overlay.querySelectorAll(".mode-seg-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      overlay.querySelectorAll(".mode-seg-btn").forEach(b => {
+        b.style.background = "#fff";
+        b.style.color = "#374151";
+      });
+      btn.style.background = "#16317F";
+      btn.style.color = "#fff";
+      overlay.querySelector("#defaultModeVal").value = btn.getAttribute("data-mode");
+    });
+  });
+
+  overlay.querySelector("#saveGameModeBtn").addEventListener("click", async () => {
+    const msgEl = overlay.querySelector("#gameModeMsg");
+    const defaultMode = overlay.querySelector("#defaultModeVal").value;
+    try {
+      const t = await getTeam(teamId);
+      await updateTeam(teamId, { settings: { ...(t?.settings || {}), defaultMode } });
+      msgEl.style.color = "#15803d";
+      msgEl.textContent = "Saved.";
+      msgEl.style.display = "inline";
+      setTimeout(() => { msgEl.style.display = "none"; }, 2000);
+    } catch (err) {
+      msgEl.style.color = "#DC2626";
+      msgEl.textContent = "Error: " + err.message;
+      msgEl.style.display = "inline";
+    }
+  });
+
+  // Team accent color swatches
+  overlay.querySelector("#accentColorGrid").addEventListener("click", e => {
+    const btn = e.target.closest(".accent-swatch");
+    if (!btn) return;
+    const color = btn.getAttribute("data-color");
+    overlay.querySelectorAll(".accent-swatch").forEach(b => {
+      const c = b.getAttribute("data-color");
+      b.style.border = "2px solid transparent";
+      b.style.boxShadow = "none";
+    });
+    btn.style.border = "3px solid #111";
+    btn.style.boxShadow = "0 0 0 2px #fff inset";
+    overlay.querySelector("#accentColorVal").value = color;
+  });
+
+  overlay.querySelector("#saveAccentColorBtn").addEventListener("click", async () => {
+    const msgEl = overlay.querySelector("#accentColorMsg");
+    const accentColor = overlay.querySelector("#accentColorVal").value;
+    try {
+      const t = await getTeam(teamId);
+      await updateTeam(teamId, { settings: { ...(t?.settings || {}), accentColor } });
+      msgEl.style.color = "#15803d";
+      msgEl.textContent = "Saved.";
+      msgEl.style.display = "inline";
+      setTimeout(() => { msgEl.style.display = "none"; }, 2000);
+    } catch (err) {
+      msgEl.style.color = "#DC2626";
+      msgEl.textContent = "Error: " + err.message;
+      msgEl.style.display = "inline";
+    }
+  });
+
+  // Save 7v7 settings
+  overlay.querySelector("#save7v7Btn").addEventListener("click", async () => {
+    const msgEl = overlay.querySelector("#v7Msg");
+    const numVal = (id, fallback) => {
+      const v = parseInt(overlay.querySelector(id).value, 10);
+      return isNaN(v) ? fallback : v;
+    };
+    try {
+      const t = await getTeam(teamId);
+      await updateTeam(teamId, {
+        settings: {
+          ...(t?.settings || {}),
+          start7v7:        numVal("#cfg7vStart", 40),
+          line1_7v7:       numVal("#cfg7vLine1", 20),
+          line2_7v7:       numVal("#cfg7vLine2", 5),
+          playsPerSeries7v7: numVal("#cfg7vPlays", 4),
+          eff7v7Mode:      overlay.querySelector("#cfg7vEff").value,
+        },
+      });
+      msgEl.style.color = "#15803d";
+      msgEl.textContent = "Saved.";
+      msgEl.style.display = "inline";
+      setTimeout(() => { msgEl.style.display = "none"; }, 2000);
+    } catch (err) {
+      msgEl.style.color = "#DC2626";
+      msgEl.textContent = "Error: " + err.message;
+      msgEl.style.display = "inline";
+    }
+  });
+
+  // Save scrimmage settings
+  overlay.querySelector("#saveScrimBtn").addEventListener("click", async () => {
+    const msgEl = overlay.querySelector("#scrimMsg");
+    const effScrimPlays = parseInt(overlay.querySelector("#cfgEffScrimPlays").value, 10) || 10;
+    const scrimmageMode = overlay.querySelector("#cfgScrimMode").value;
+    try {
+      const t = await getTeam(teamId);
+      await updateTeam(teamId, {
+        settings: {
+          ...(t?.settings || {}),
+          scrimmageMode,
+          effScrimPlays,
+        },
+      });
+      msgEl.style.color = "#15803d";
+      msgEl.textContent = "Saved.";
+      msgEl.style.display = "inline";
+      setTimeout(() => { msgEl.style.display = "none"; }, 2000);
+    } catch (err) {
+      msgEl.style.color = "#DC2626";
+      msgEl.textContent = "Error: " + err.message;
+      msgEl.style.display = "inline";
+    }
+  });
+
+  // Export Team Data (JSON)
+  overlay.querySelector("#exportJsonBtn").addEventListener("click", async () => {
+    const msgEl = overlay.querySelector("#exportMsg");
+    const btn   = overlay.querySelector("#exportJsonBtn");
+    btn.disabled = true;
+    btn.textContent = "Exporting…";
+    msgEl.style.display = "none";
+    try {
+      const [currentTeam, games] = await Promise.all([getTeam(teamId), getGames(teamId)]);
+      const exportDate = new Date().toISOString().slice(0, 10);
+      const payload = JSON.stringify({
+        exportedAt: new Date().toISOString(),
+        team: currentTeam,
+        games,
+      }, null, 2);
+      const blob = new Blob([payload], { type: "application/json" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `snapchart-export-${exportDate}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      msgEl.style.color = "#15803d";
+      msgEl.textContent = "Downloaded.";
+      msgEl.style.display = "inline";
+      setTimeout(() => { msgEl.style.display = "none"; }, 3000);
+    } catch (err) {
+      msgEl.style.color = "#DC2626";
+      msgEl.textContent = "Error: " + err.message;
+      msgEl.style.display = "inline";
+    }
+    btn.disabled = false;
+    btn.textContent = "Export Team Data (JSON)";
   });
 
   // Save charting defaults

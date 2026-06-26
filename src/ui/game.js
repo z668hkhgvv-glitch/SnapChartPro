@@ -52,7 +52,7 @@ function dnDist(p) {
 }
 
 function autoEffective(mode, down, dist, yards, settings) {
-  if (mode === "7v7")       return autoEff7v7(down, dist, yards);
+  if (mode === "7v7")       return autoEff7v7(down, dist, yards, settings.eff7v7Mode);
   if (mode === "scrimmage") return (Number(yards) || 0) >= (settings.effScrim || 5);
   dist  = Number(dist)  || 0;
   yards = Number(yards) || 0;
@@ -65,30 +65,35 @@ function autoEffective(mode, down, dist, yards, settings) {
   return false;
 }
 
-function autoEff7v7(down, toGo, yards) {
+function autoEff7v7(down, toGo, yards, eff7v7Mode) {
   toGo  = Number(toGo)  || 0;
   yards = Number(yards) || 0;
   down  = Number(down)  || 1;
   if (toGo <= 0) return yards >= 0;
   if (yards >= toGo) return true;
+  // "pace" mode: any positive gain is effective; "strict" mode: must advance past current line marker
+  if ((eff7v7Mode || "pace") === "pace") return yards > 0;
   const remaining = Math.max(1, 5 - down);
   return yards >= toGo / remaining;
 }
 
-function target7v7(ballOn) {
+function target7v7(ballOn, line1, line2) {
   ballOn = Number(ballOn);
+  line1  = Number(line1 ?? 20);
+  line2  = Number(line2 ?? 5);
   if (isNaN(ballOn)) return null;
-  if (ballOn > 20) return 20;
-  if (ballOn > 5)  return 5;
+  if (ballOn > line1) return line1;
+  if (ballOn > line2) return line2;
   return 0;
 }
 
-function advance7v7(ballOn, down, yards) {
+function advance7v7(ballOn, down, yards, start, line1, line2) {
+  start = Number(start ?? 40);
   const nb = Number(ballOn) - Number(yards);
-  if (nb <= 0) return { ball: 40, down: 1 };
-  const prevTarget = target7v7(ballOn);
+  if (nb <= 0) return { ball: start, down: 1 };
+  const prevTarget = target7v7(ballOn, line1, line2);
   if (nb <= prevTarget) return { ball: nb, down: 1 };
-  if (Number(down) >= 4) return { ball: 40, down: 1 };
+  if (Number(down) >= 4) return { ball: start, down: 1 };
   return { ball: nb, down: Number(down) + 1 };
 }
 
@@ -155,6 +160,11 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   let unsub = null;
   let penaltyPendingPlay = null;
   let lastPasser = '', lastReceiver = '', lastRusher = '';
+  // Change 3 — scrimmage ball tracking (fixed/simulated modes)
+  let scrimmStartYl   = null;
+  let scrimmStartSign = -1;
+  // Change 4 — TD re-spot state
+  let isTouchdown = false;
 
   // Role gates
   const canChart  = userRole !== "readonly";   // add & edit plays
@@ -165,6 +175,12 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   const is7   = mode === "7v7";
   const isScrim = mode === "scrimmage";
 
+  // Change 1 — Apply team accent color
+  const accentColor = teamSettings.settings?.accentColor || "#16317F";
+  document.documentElement.style.setProperty("--royal", accentColor);
+  // Derive a lighter tint for backgrounds (approx 15% opacity on white)
+  document.documentElement.style.setProperty("--royal-bg", accentColor + "26");
+
   const settings = {
     effStd1:     teamSettings?.effStd1     ?? 5,
     effStd2:     teamSettings?.effStd2     ?? 50,
@@ -173,12 +189,22 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     effScrim:    teamSettings?.effScrim    ?? 5,
     defaultDist: teamSettings?.defaultDist ?? 10,
     scrimmPlays: teamSettings?.scrimmPlays ?? 10,
+    // Change 2 — 7v7 knobs from teamSettings
+    start7v7:       teamSettings.settings?.start7v7       ?? 40,
+    line1_7v7:      teamSettings.settings?.line1_7v7      ?? 20,
+    line2_7v7:      teamSettings.settings?.line2_7v7      ?? 5,
+    playsPerSeries7v7: teamSettings.settings?.playsPerSeries7v7 ?? 4,
+    eff7v7Mode:     teamSettings.settings?.eff7v7Mode     ?? "pace",
+    // Change 3 — scrimmage ball-movement mode
+    scrimmageMode:  teamSettings.settings?.scrimmageMode  ?? "advance",
+    effScrimPlays:  teamSettings.settings?.effScrimPlays  ?? 10,
   };
 
   // Draft holds the in-progress form values that are NOT simple text inputs.
+  const isSimScrimInit = isScrim && (teamSettings.settings?.scrimmageMode ?? "advance") === "simulated";
   const draft = {
     qtr:       is7 || isScrim ? "" : "1",
-    down:      isScrim ? "" : "1",
+    down:      isSimScrimInit ? "1" : isScrim ? "" : "1",
     hash:      "M",
     type:      is7 ? "pass" : "run",
     ylSign:    is7 ? 1 : -1,
@@ -238,6 +264,20 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     paintEff();
     document.getElementById("effHint").textContent = "Set by you for this play";
   });
+
+  // Change 4 — TD toggle button
+  const tdBtn = document.getElementById("tdBtn");
+  function paintTdBtn() {
+    tdBtn.style.background = isTouchdown ? "#15803d" : "#fff";
+    tdBtn.style.color      = isTouchdown ? "#fff"    : "var(--ink)";
+    tdBtn.style.border     = isTouchdown ? "1.5px solid #15803d" : "1.5px solid #E2E8F0";
+    tdBtn.setAttribute("aria-pressed", isTouchdown ? "true" : "false");
+  }
+  tdBtn.addEventListener("click", () => {
+    isTouchdown = !isTouchdown;
+    paintTdBtn();
+  });
+  paintTdBtn();
   function refreshAutoEff() {
     if (draft.effTouched) return;
     draft.effective = autoEffective(
@@ -369,7 +409,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       hint.innerHTML = "Enter where the ball is (yards from the goal) — start at the 40";
       return;
     }
-    const t    = target7v7(ballOn);
+    const t    = target7v7(ballOn, settings.line1_7v7, settings.line2_7v7);
     const toGo = Number(ballOn) - t;
     document.getElementById("dist").value = toGo;
     const targetLabel = t === 0 ? "the end zone" : "the " + t;
@@ -378,7 +418,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   }
   function updateScrimHint() {
     if (mode !== "scrimmage") return;
-    const sp = settings.scrimmPlays || 10;
+    const sp = settings.effScrimPlays || 10;
     const playNum = (plays.length % sp) + 1;
     const series  = Math.floor(plays.length / sp) + 1;
     document.getElementById("seriesHint").innerHTML =
@@ -390,23 +430,24 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   populatePlayerDropdowns();
   updatePlayerFieldVisibility(draft.type);
   if (is7) {
-    document.getElementById("yl").value = 40;
+    document.getElementById("yl").value = settings.start7v7;
     update7v7Hint();
   } else if (isScrim) {
     updateScrimHint();
   }
 
   function applyModeVisibility() {
+    const isSimScrim = isScrim && settings.scrimmageMode === "simulated";
     document.getElementById("qtrFld").style.display   = is7 || isScrim ? "none" : "";
-    document.getElementById("downFld").style.display  = isScrim ? "none" : "";
+    document.getElementById("downFld").style.display  = (isScrim && !isSimScrim) ? "none" : "";
     document.getElementById("ptypeFld").style.display = is7 ? "none" : "";
-    document.getElementById("distFld").style.display  = is7 || isScrim ? "none" : "";
+    document.getElementById("distFld").style.display  = is7 || (isScrim && !isSimScrim) ? "none" : "";
     document.getElementById("seriesRow").style.display = is7 || isScrim ? "" : "none";
     document.getElementById("frontFld").style.display = is7 ? "none" : "";
     const modeBadge = document.getElementById("modeBadge");
     if (modeBadge) {
       modeBadge.style.display = is7 || isScrim ? "" : "none";
-      modeBadge.textContent = is7 ? "7v7 · pass-only" : isScrim ? `Scrimmage · ${settings.scrimmPlays || 10}-play series` : "";
+      modeBadge.textContent = is7 ? "7v7 · pass-only" : isScrim ? `Scrimmage · ${settings.effScrimPlays || 10}-play series` : "";
     }
     const ylSignBtnEl = document.getElementById("ylSignBtn");
     const ylHintEl    = document.getElementById("ylHint");
@@ -914,6 +955,8 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     paintYardSign();
     draft.note = "";
     paintNote();
+    isTouchdown = false;
+    paintTdBtn();
     if (document.getElementById("fPasser"))   document.getElementById("fPasser").value   = lastPasser;
     if (document.getElementById("fReceiver")) document.getElementById("fReceiver").value = lastReceiver;
     if (document.getElementById("fRusher"))   document.getElementById("fRusher").value   = lastRusher;
@@ -935,7 +978,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     const motion   = draft.motionOn ? titleCase(document.getElementById("motion").value.trim()) : "";
     const front    = is7 ? "" : titleCase(document.getElementById("front").value.trim());
     const coverage = titleCase(document.getElementById("coverage").value.trim());
-    const sp = settings.scrimmPlays || 10;
+    const sp = settings.effScrimPlays || 10;
 
     const playData = {
       mode,
@@ -991,12 +1034,13 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
           return;
         }
 
+        const wasTouchdown = isTouchdown; // capture before finishEntry resets it
         await dbAddPlay(teamId, game.id, playData);
         finishEntry(true);
 
         // Auto-advance form state
         if (mode === "7v7") {
-          const res = advance7v7(playData.yl, playData.down, yards);
+          const res = advance7v7(playData.yl, playData.down, yards, settings.start7v7, settings.line1_7v7, settings.line2_7v7);
           draft.down = String(res.down);
           setSeg("down", String(res.down));
           document.getElementById("yl").value = res.ball;
@@ -1012,14 +1056,48 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
           }
         }
         if (mode !== "7v7") {
-          const adv = advanceBallOn(playData.yl, yards);
-          if (adv) {
-            document.getElementById("yl").value = adv.yl;
-            draft.ylSign = adv.sign;
-            paintYlSign();
+          // Change 3 — scrimmage ball-movement modes
+          if (isScrim && settings.scrimmageMode === "fixed") {
+            // Capture start on first play of each series, then reset ball each play
+            if (!scrimmStartYl || playData.playNum === 1) {
+              const _ylNum = Number(playData.yl);
+              scrimmStartYl   = String(Math.abs(_ylNum) || "");
+              scrimmStartSign = _ylNum <= 0 ? -1 : 1;
+            }
+            if (scrimmStartYl) {
+              document.getElementById("yl").value = scrimmStartYl;
+              draft.ylSign = scrimmStartSign; paintYlSign();
+            }
+          } else if (isScrim && settings.scrimmageMode === "simulated") {
+            // Simulated: track down & distance like a real game
+            const _d = parseInt(preDown, 10), _pd = parseInt(preDist, 10);
+            if (!isNaN(_d) && !isNaN(_pd)) {
+              if (yards >= _pd || playData.tags.indexOf("1st Down") > -1) {
+                draft.down = "1"; setSeg("down", "1");
+                document.getElementById("dist").value = settings.defaultDist;
+              } else if (_d < 4) {
+                draft.down = String(_d + 1); setSeg("down", String(_d + 1));
+                document.getElementById("dist").value = Math.max(_pd - yards, 1);
+              } else {
+                draft.down = "1"; setSeg("down", "1");
+                document.getElementById("dist").value = settings.defaultDist;
+              }
+            }
+            const adv = advanceBallOn(playData.yl, yards);
+            if (adv) { document.getElementById("yl").value = adv.yl; draft.ylSign = adv.sign; paintYlSign(); }
+          } else {
+            // "advance" (default): ball advances each play
+            const adv = advanceBallOn(playData.yl, yards);
+            if (adv) { document.getElementById("yl").value = adv.yl; draft.ylSign = adv.sign; paintYlSign(); }
           }
         }
         if (isScrim) updateScrimHint();
+
+        // Change 4 — TD re-spot modal
+        if (wasTouchdown) {
+          document.getElementById("respotInput").value = "";
+          document.getElementById("respotModal").hidden = false;
+        }
       }
     } catch (err) {
       alert("Could not save play: " + err.message);
@@ -1096,14 +1174,44 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     }
     draft.qtr = last.qtr || ""; setSeg("qtr", draft.qtr);
     if (mode === "7v7") {
-      const res = advance7v7(last.yl, last.down, last.yards);
+      const res = advance7v7(last.yl, last.down, last.yards, settings.start7v7, settings.line1_7v7, settings.line2_7v7);
       draft.down = String(res.down); setSeg("down", String(res.down));
       document.getElementById("yl").value = res.ball;
       update7v7Hint();
     } else if (mode === "scrimmage") {
-      draft.down = ""; setSeg("down", "");
-      const advS = advanceBallOn(last.yl, last.yards);
-      if (advS) { document.getElementById("yl").value = advS.yl; draft.ylSign = advS.sign; paintYlSign(); }
+      // Change 3 — scrimmage ball-movement modes in restore
+      if (settings.scrimmageMode === "fixed" && scrimmStartYl) {
+        draft.down = ""; setSeg("down", "");
+        document.getElementById("yl").value = scrimmStartYl;
+        draft.ylSign = scrimmStartSign; paintYlSign();
+      } else if (settings.scrimmageMode === "simulated") {
+        // Restore down/dist tracking
+        const _preDist = parseInt(last.dist, 10);
+        const _preDown = parseInt(last.down, 10);
+        const _yds = last.yards;
+        if (!isNaN(_preDown) && !isNaN(_preDist)) {
+          if (_yds >= _preDist || (last.tags && last.tags.indexOf("1st Down") > -1)) {
+            draft.down = "1"; setSeg("down", "1");
+            document.getElementById("dist").value = settings.defaultDist;
+          } else if (_preDown < 4) {
+            draft.down = String(_preDown + 1); setSeg("down", String(_preDown + 1));
+            document.getElementById("dist").value = Math.max(_preDist - _yds, 1);
+          } else {
+            draft.down = "1"; setSeg("down", "1");
+            document.getElementById("dist").value = settings.defaultDist;
+          }
+        } else {
+          draft.down = "1"; setSeg("down", "1");
+          document.getElementById("dist").value = settings.defaultDist;
+        }
+        const advSim = advanceBallOn(last.yl, last.yards);
+        if (advSim) { document.getElementById("yl").value = advSim.yl; draft.ylSign = advSim.sign; paintYlSign(); }
+      } else {
+        // "advance" (default)
+        draft.down = ""; setSeg("down", "");
+        const advS = advanceBallOn(last.yl, last.yards);
+        if (advS) { document.getElementById("yl").value = advS.yl; draft.ylSign = advS.sign; paintYlSign(); }
+      }
       updateScrimHint();
     } else {
       const preDist = parseInt(last.dist, 10);
@@ -1170,6 +1278,22 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
 
+  // ---- TD re-spot modal handlers (Change 4) ----
+  document.getElementById("respotSet").addEventListener("click", () => {
+    const val = document.getElementById("respotInput").value.trim();
+    const num = parseInt(val, 10);
+    if (!isNaN(num) && num >= 1 && num <= 99) {
+      // Pre-fill ball-on: treat as opponent's side (positive sign) for typical kickoff return spot
+      document.getElementById("yl").value = Math.min(num, 50);
+      draft.ylSign = num <= 50 ? -1 : 1;
+      paintYlSign();
+    }
+    document.getElementById("respotModal").hidden = true;
+  });
+  document.getElementById("respotSkip").addEventListener("click", () => {
+    document.getElementById("respotModal").hidden = true;
+  });
+
   // ---- note modal ----
   function paintNote() {
     const btn = document.getElementById("noteBtn");
@@ -1191,6 +1315,55 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   });
   document.getElementById("noteCancel").addEventListener("click", () => {
     document.getElementById("noteModal").hidden = true;
+  });
+
+  // ---- Suggest a Play ----
+  document.getElementById("suggestBtn").addEventListener("click", () => {
+    // Pre-fill situation from current form values if any
+    const curDown = draft.down;
+    const curHash = draft.hash;
+    if (curDown) document.getElementById("suggestDown").value = curDown;
+    if (curHash) document.getElementById("suggestHash").value = curHash;
+    document.getElementById("suggestResults").innerHTML = buildSuggestResults();
+    document.getElementById("suggestModal").hidden = false;
+  });
+
+  document.getElementById("suggestClose").addEventListener("click", () => {
+    document.getElementById("suggestModal").hidden = true;
+  });
+  document.getElementById("suggestModal").addEventListener("click", (e) => {
+    if (e.target === document.getElementById("suggestModal"))
+      document.getElementById("suggestModal").hidden = true;
+  });
+
+  // Live update as situation changes
+  ["suggestDown", "suggestDist", "suggestHash"].forEach((id) => {
+    document.getElementById(id).addEventListener("change", () => {
+      document.getElementById("suggestResults").innerHTML = buildSuggestResults();
+    });
+  });
+
+  // Tap a suggestion → pre-fill form
+  document.getElementById("suggestResults").addEventListener("click", (e) => {
+    const row = e.target.closest(".suggest-pick");
+    if (!row) return;
+    const call = row.getAttribute("data-call");
+    const type = row.getAttribute("data-type");
+    // Pre-fill play call
+    const inpCall = document.getElementById("call");
+    if (inpCall) inpCall.value = call;
+    // Pre-fill play type via segmented control (ptype buttons)
+    const ptypeBox = document.getElementById("ptype");
+    if (ptypeBox) {
+      const btn = ptypeBox.querySelector(`button[data-v="${type}"]`);
+      if (btn) {
+        Array.from(ptypeBox.children).forEach((c) => c.classList.remove("on"));
+        btn.classList.add("on");
+        draft.type = type;
+        updatePlayerFieldVisibility(type);
+      }
+    }
+    document.getElementById("suggestModal").hidden = true;
   });
 
   // ---- toolbar ----
@@ -1227,6 +1400,10 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       renderReportTab(btn.getAttribute("data-tab"));
     });
   });
+
+  // Show "By Series" tab only in scrimmage mode
+  const rtabSeriesBtn = document.getElementById("rtabSeries");
+  if (rtabSeriesBtn) rtabSeriesBtn.style.display = isScrim ? "" : "none";
 
   // ---- quick report renderer ----
   function renderReportTab(tab) {
@@ -1329,6 +1506,43 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       html = buildGameStats();
     }
 
+    if (tab === "series") {
+      const hasSeries = plays.some(p => p.series != null && p.series !== "");
+      if (!hasSeries) {
+        html = '<div class="report-empty">By Series is only available in Scrimmage mode.</div>';
+      } else {
+        const serNums = [...new Set(plays.map(p => p.series).filter(v => v != null && v !== ""))].sort((a, b) => Number(a) - Number(b));
+        html = serNums.map(s => {
+          const sub   = plays.filter(p => p.series === s);
+          const succ  = sub.filter(p => p.success).length;
+          const yards = sub.reduce((sum, p) => sum + (Number(p.yards) || 0), 0);
+          return rptRow("Series " + s, sub.length, succ, yards);
+        }).join("");
+        if (!html) html = '<div class="report-empty">No series data found.</div>';
+      }
+    }
+
+    if (tab === "notes") {
+      const noted = plays.filter(p => p.note && String(p.note).trim() !== "");
+      if (!noted.length) {
+        html = '<div class="report-empty">No notes added this game.</div>';
+      } else {
+        html = noted.map(p => {
+          const ctx = p.qtr ? ("Q" + esc(p.qtr)) : (p.series != null ? "Series " + esc(String(p.series)) : "");
+          const dnDistStr = (p.down && p.dist != null && p.dist !== "")
+            ? esc(p.down) + (["1","2","3","4"].includes(String(p.down))
+                ? (p.down === "1" ? "st" : p.down === "2" ? "nd" : p.down === "3" ? "rd" : "th")
+                : "") + " &amp; " + esc(p.dist)
+            : "";
+          const meta = [ctx, dnDistStr, esc(p.type || ""), esc(p.call || "")].filter(Boolean).join(" · ");
+          return `<div style="background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:12px 14px;margin-bottom:8px">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--slate,#6B7280);margin-bottom:4px">${meta}</div>
+            <div style="font-size:14px;color:var(--ink,#0F1830)">${esc(p.note)}</div>
+          </div>`;
+        }).join("");
+      }
+    }
+
     body.innerHTML = html || '<div class="report-empty">No data for this view.</div>';
   }
 
@@ -1369,6 +1583,74 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     return statsHtml + `<div class="table-scroll"><table><thead><tr>
       <th>#</th><th>Qtr/Ser</th><th>Dn &amp; Dist</th><th>Ball On</th><th>Formation</th><th>Tags</th><th>Yds</th><th>Eff</th>
     </tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  // ---- suggest a play ----
+  function buildSuggestResults() {
+    const selDown = document.getElementById("suggestDown").value;
+    const selDist = document.getElementById("suggestDist").value;
+    const selHash = document.getElementById("suggestHash").value;
+
+    const filtered = plays.filter((p) => {
+      const callVal = (p.call || "").trim();
+      if (!callVal) return false;
+      if (selDown && String(p.down) !== selDown) return false;
+      if (selDist) {
+        const d = Number(p.dist);
+        if (selDist === "short"  && !(d <= 3))           return false;
+        if (selDist === "medium" && !(d >= 4 && d <= 7)) return false;
+        if (selDist === "long"   && !(d >= 8))           return false;
+      }
+      if (selHash && p.hash !== selHash) return false;
+      return true;
+    });
+
+    if (!filtered.length) {
+      return '<div class="report-empty">No plays match this situation yet.</div>';
+    }
+
+    // Group by call name
+    const groups = {};
+    filtered.forEach((p) => {
+      const key = (p.call || "").trim();
+      if (!key) return;
+      if (!groups[key]) groups[key] = { call: key, plays: [] };
+      groups[key].plays.push(p);
+    });
+
+    // Compute stats per group
+    const results = Object.values(groups).map((g) => {
+      const n     = g.plays.length;
+      const succ  = g.plays.filter((p) => p.success === true).length;
+      const yards = g.plays.reduce((s, p) => s + (Number(p.yards) || 0), 0);
+      const effPct = Math.round(100 * succ / n);
+      const avg   = (yards / n).toFixed(1);
+      // Most common type
+      const typeCounts = {};
+      g.plays.forEach((p) => { const t = p.type || "run"; typeCounts[t] = (typeCounts[t] || 0) + 1; });
+      const type = Object.keys(typeCounts).sort((a, b) => typeCounts[b] - typeCounts[a])[0] || "run";
+      return { call: g.call, n, succ, yards, effPct, avg, type };
+    });
+
+    // Sort by effPct desc, then n desc
+    results.sort((a, b) => b.effPct - a.effPct || b.n - a.n);
+
+    const top = results.slice(0, 10);
+    const summaryHtml = `<div style="font-size:12px;color:var(--slate);margin-bottom:10px">${filtered.length} plays match &middot; ranked by success rate &middot; tap to use</div>`;
+
+    const rowsHtml = top.map((r) => {
+      const color = r.effPct >= 50 ? "#15803d" : "#b91c1c";
+      return `<div class="rpt-row suggest-pick" data-call="${esc(r.call)}" data-type="${esc(r.type)}" style="cursor:pointer">
+        <div class="rpt-label">${esc(r.call)} <span style="font-size:11px;color:var(--slate)">&middot; ${esc(r.type)} &middot; ${r.n} play${r.n !== 1 ? "s" : ""}</span></div>
+        <div class="rpt-stats">
+          <span class="rpt-avg">${r.avg} yds/play</span>
+          <span class="rpt-eff" style="color:${color}">${r.effPct}% effective</span>
+        </div>
+        <div class="rpt-bar-wrap"><div class="rpt-bar" style="width:${r.effPct}%"></div></div>
+      </div>`;
+    }).join("");
+
+    return summaryHtml + rowsHtml;
   }
 
   // ---- stepper buttons ----
@@ -1646,6 +1928,7 @@ function buildHTML(game, mode) {
           <input id="call" type="text" autocomplete="off" autocapitalize="words"
                  placeholder="Start typing &mdash; past entries appear">
           <div class="ac-drop" id="callDrop" hidden></div>
+          <button type="button" class="btn-secondary" id="suggestBtn" style="width:100%;margin-top:4px;font-size:13px;height:36px">&#9889; Suggest Play</button>
         </div>
       </div>
 
@@ -1705,6 +1988,11 @@ function buildHTML(game, mode) {
             <span class="box">&#10003;</span> Effective Play
           </button>
           <div class="hint" id="effHint">Auto-checked when the play gains enough</div>
+        </div>
+        <div class="fld"><label>Touchdown?</label>
+          <button id="tdBtn" class="eff" type="button" aria-pressed="false" style="background:#fff;border:1.5px solid #E2E8F0;color:var(--ink)">
+            <span class="box">&#127944;</span> TD
+          </button>
         </div>
         <div class="fld grow"><label>Result (tap any)</label>
           <div class="chips" id="tags">
@@ -1775,6 +2063,8 @@ function buildHTML(game, mode) {
         <button class="rtab" data-tab="hash">By Hash</button>
         <button class="rtab" data-tab="players">Players</button>
         <button class="rtab" data-tab="stats">Game Stats</button>
+        <button class="rtab" id="rtabSeries" data-tab="series" style="display:none">By Series</button>
+        <button class="rtab" data-tab="notes">Game Notes</button>
       </div>
       <div class="report-body" id="reportBody"></div>
     </div>
@@ -1798,6 +2088,62 @@ function buildHTML(game, mode) {
         <button id="drillClose" class="modal-cancel" style="margin:0;flex:none;font-size:22px;line-height:1;padding:0 6px">&times;</button>
       </div>
       <div id="drillBody" class="drill-scroll"></div>
+    </div>
+  </div>
+
+  <div class="modal-back" id="respotModal" hidden>
+    <div class="modal" style="max-width:320px;text-align:center">
+      <h2 style="margin-bottom:8px">After the TD</h2>
+      <p style="font-size:14px;color:var(--slate);margin-bottom:16px">Where does the next drive start? (ball-on yard line)</p>
+      <input id="respotInput" type="number" class="field" style="width:100%;text-align:center;font-size:24px;height:52px;margin-bottom:16px" placeholder="25" min="1" max="99">
+      <div style="display:flex;gap:10px">
+        <button class="btn-secondary" id="respotSkip" style="flex:1">Skip</button>
+        <button class="btn-primary" id="respotSet" style="flex:1">Set</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-back" id="suggestModal" hidden>
+    <div class="modal" style="max-width:480px;width:95%">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <h2 style="font-size:18px">Suggest a Play</h2>
+        <button class="back" id="suggestClose">&#x2715;</button>
+      </div>
+
+      <!-- Situation pickers -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+        <div>
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);display:block;margin-bottom:4px">Down</label>
+          <select id="suggestDown" class="field" style="width:100%">
+            <option value="">Any</option>
+            <option value="1">1st</option>
+            <option value="2">2nd</option>
+            <option value="3">3rd</option>
+            <option value="4">4th</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);display:block;margin-bottom:4px">To Go</label>
+          <select id="suggestDist" class="field" style="width:100%">
+            <option value="">Any</option>
+            <option value="short">Short (1&ndash;3)</option>
+            <option value="medium">Medium (4&ndash;7)</option>
+            <option value="long">Long (8+)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);display:block;margin-bottom:4px">Hash</label>
+          <select id="suggestHash" class="field" style="width:100%">
+            <option value="">Any</option>
+            <option value="L">Left</option>
+            <option value="M">Middle</option>
+            <option value="R">Right</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div id="suggestResults"></div>
     </div>
   </div>
 </div>`;
