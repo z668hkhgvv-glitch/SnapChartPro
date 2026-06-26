@@ -7,7 +7,7 @@ import {
   updateMemberRole, removeMember,
   getPlays, getSeasons, archiveSeason,
 } from "../db.js";
-import { renderGame } from "./game.js";
+import { renderGame, buildHeatMap } from "./game.js";
 
 // ── Hudl CSV roster import helper ────────────────────────────────────────────
 
@@ -1216,10 +1216,23 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
 
   document.getElementById("srDrillClose").addEventListener("click", () => {
     document.getElementById("srDrillModal").hidden = true;
+    hmModalPlays = null;
   });
+
+  let hmModalPlays = null;
+  let hmModalFilter = "";
+
   document.getElementById("srDrillModal").addEventListener("click", (e) => {
-    if (e.target === document.getElementById("srDrillModal"))
+    if (e.target === document.getElementById("srDrillModal")) {
       document.getElementById("srDrillModal").hidden = true;
+      hmModalPlays = null;
+      return;
+    }
+    const hmBtn = e.target.closest("[data-hmf]");
+    if (hmBtn && hmModalPlays) {
+      hmModalFilter = hmBtn.getAttribute("data-hmf");
+      document.getElementById("srDrillBody").innerHTML = buildHeatMap(hmModalPlays, hmModalFilter);
+    }
   });
 
   // Load all games + their plays
@@ -1301,6 +1314,7 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
               <span style="font-family:var(--num);font-size:14px">${np} plays · <span style="color:#15803d">${rp}%</span> eff · ${avgp >= 0 ? "+" : ""}${avgp} yds/play</span>
               <button class="btn-secondary sr-view-btn" data-view-game="${esc(g.id)}">View</button>
+              <button class="btn-secondary" data-hm-game="${esc(g.id)}">Heat Map</button>
             </div>
           </div>
           <div id="sr-gd-${esc(g.id)}" style="display:none;margin-top:12px">
@@ -1324,11 +1338,27 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
       });
     });
 
+    // Wire heat map buttons
+    body.querySelectorAll("[data-hm-game]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-hm-game");
+        const g = activeGames.find((g) => g.id === id);
+        if (!g) return;
+        const gameName = g.opponent ? "vs " + g.opponent : "Untitled game";
+        hmModalPlays = g.plays;
+        hmModalFilter = "";
+        document.getElementById("srDrillTitle").textContent = "Heat Map — " + gameName;
+        document.getElementById("srDrillBody").innerHTML = buildHeatMap(g.plays, "");
+        document.getElementById("srDrillModal").hidden = false;
+      });
+    });
+
     // Wire drill-down
     body.addEventListener("click", (e) => {
       const row = e.target.closest("[data-drill]");
       if (!row) return;
       const callName = row.getAttribute("data-drill");
+      hmModalPlays = null;
       document.getElementById("srDrillTitle").textContent = callName;
       document.getElementById("srDrillBody").innerHTML = srBuildDrillDown(callName, activeGames);
       document.getElementById("srDrillModal").hidden = false;

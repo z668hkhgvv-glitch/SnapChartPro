@@ -727,3 +727,29 @@ tr[data-drill]:hover td { background: #EEF2FF; }
   font-size: 14px; font-family: var(--body); background: #fff; color: var(--ink);
 }
 .sel-half:focus { outline: 2px solid var(--royal-2); outline-offset: 1px; border-color: transparent; }
+
+/* ── Heat Map ─────────────────────────────────────────────────────────────── */
+.hm-wrap { margin-top:4px }
+.hm-filter-bar { display:flex; align-items:center; gap:8px; margin-bottom:14px; flex-wrap:wrap }
+.hm-f { padding:5px 14px; border:1.5px solid var(--chalk); border-radius:20px; background:#fff; color:var(--ink); font-family:var(--num); font-size:13px; cursor:pointer; letter-spacing:.03em; transition:background .15s,color .15s }
+.hm-f.hm-f-on { background:var(--royal); color:#fff; border-color:var(--royal) }
+.hm-total { margin-left:auto; color:var(--slate); font-size:13px }
+.hm-field { display:flex; align-items:stretch; border:2px solid #374151; border-radius:8px; overflow:hidden; margin-bottom:10px }
+.hm-ez { width:34px; flex-shrink:0; display:flex; align-items:center; justify-content:center; background:#1a4a1a }
+.hm-ez span { color:rgba(255,255,255,.55); font-family:var(--num); font-size:9px; text-transform:uppercase; letter-spacing:.07em; writing-mode:vertical-rl }
+.hm-ez-own span { transform:rotate(180deg) }
+.hm-grid-wrap { flex:1; display:flex; flex-direction:column; background:#1e5c1e }
+.hm-zone-row { display:flex; border-bottom:1px solid rgba(255,255,255,.18) }
+.hm-hlbl-spc { width:72px; flex-shrink:0 }
+.hm-zh { flex:1; text-align:center; color:rgba(255,255,255,.8); font-family:var(--num); font-size:10px; padding:5px 2px; text-transform:uppercase; letter-spacing:.04em; border-left:1px solid rgba(255,255,255,.12) }
+.hm-row { display:flex; border-bottom:1px solid rgba(255,255,255,.1) }
+.hm-row:last-child { border-bottom:0 }
+.hm-hlbl { width:72px; flex-shrink:0; display:flex; align-items:center; justify-content:flex-end; padding:4px 8px 4px 0; color:rgba(255,255,255,.72); font-size:11px; font-family:var(--num) }
+.hm-cell { flex:1; min-height:68px; display:flex; flex-direction:column; align-items:center; justify-content:center; border-left:1px solid rgba(255,255,255,.08); padding:4px 2px; text-align:center }
+.hm-cnt { font-family:var(--num); font-size:20px; font-weight:700; line-height:1; color:#fff }
+.hm-pct { font-size:11px; margin-top:2px; color:rgba(255,255,255,.9) }
+.hm-avg { font-size:10px; color:rgba(255,255,255,.7) }
+.hm-empty { color:#6B7280; font-size:16px }
+.hm-legend { display:flex; gap:14px; flex-wrap:wrap; margin-top:6px }
+.hm-leg-item { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--slate) }
+.hm-swatch { display:inline-block; width:13px; height:13px; border-radius:3px; flex-shrink:0 }

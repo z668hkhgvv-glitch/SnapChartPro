@@ -109,6 +109,101 @@ function advanceBallOn(ylStr, yards) {
   return { yl: String(Math.round(newYl) || 50), sign: newSign };
 }
 
+// ---------- heat map ----------------------------------------------------------
+
+export function buildHeatMap(playsArr, filterType) {
+  const ZONES = [
+    { label: "Own 1–20",  min: 1,  max: 20 },
+    { label: "Own 21–40", min: 21, max: 40 },
+    { label: "Midfield",  min: 41, max: 60 },
+    { label: "Opp 40–21", min: 61, max: 80 },
+    { label: "Opp 20–11", min: 81, max: 89 },
+    { label: "Red Zone",  min: 90, max: 99 },
+  ];
+  const HASHES = ["L", "M", "R"];
+  const HASH_LBL = { L: "Left Hash", M: "Middle", R: "Right Hash" };
+
+  function posFromYl(yl) {
+    const n = Number(yl);
+    if (yl === "" || yl == null || isNaN(n)) return null;
+    return n >= 0 ? n : 100 + n;
+  }
+
+  function hmColor(rate, count) {
+    if (!count) return "#E8EBF0";
+    const h = Math.round(rate * 120);
+    const l = count < 3 ? 52 : 43;
+    return `hsl(${h},65%,${l}%)`;
+  }
+
+  let src = filterType ? playsArr.filter((p) => p.type === filterType) : [...playsArr];
+  src = src.filter((p) => p.type !== "punt");
+
+  const grid = {};
+  src.forEach((p) => {
+    const pos = posFromYl(p.yl);
+    if (pos === null) return;
+    const zi = ZONES.findIndex((z) => pos >= z.min && pos <= z.max);
+    if (zi === -1) return;
+    if (!["L", "M", "R"].includes(p.hash)) return;
+    const key = `${zi}_${p.hash}`;
+    if (!grid[key]) grid[key] = { count: 0, success: 0, yards: 0 };
+    grid[key].count++;
+    if (p.success) grid[key].success++;
+    grid[key].yards += Number(p.yards) || 0;
+  });
+
+  const totalPlays = src.filter((p) => {
+    const pos = posFromYl(p.yl);
+    return pos !== null && ["L", "M", "R"].includes(p.hash);
+  }).length;
+
+  const zoneHdrs = ZONES.map((z) => `<div class="hm-zh">${esc(z.label)}</div>`).join("");
+
+  const rows = HASHES.map((h) => {
+    const cells = ZONES.map((z, zi) => {
+      const d = grid[`${zi}_${h}`] || { count: 0, success: 0, yards: 0 };
+      const rate = d.count ? d.success / d.count : 0;
+      const pct = d.count ? Math.round(100 * rate) : 0;
+      const avg = d.count ? (d.yards / d.count).toFixed(1) : null;
+      const bg = hmColor(rate, d.count);
+      const inner = d.count
+        ? `<div class="hm-cnt">${d.count}</div><div class="hm-pct">${pct}% eff</div>${avg !== null ? `<div class="hm-avg">${Number(avg) > 0 ? "+" : ""}${avg} yds</div>` : ""}`
+        : `<div class="hm-empty">—</div>`;
+      return `<div class="hm-cell" style="background:${bg}">${inner}</div>`;
+    }).join("");
+    return `<div class="hm-row"><div class="hm-hlbl">${HASH_LBL[h]}</div>${cells}</div>`;
+  }).join("");
+
+  const noData = totalPlays === 0
+    ? `<div class="report-empty">No plays with ball-on position data yet.</div>`
+    : "";
+
+  return `<div class="hm-wrap">
+    <div class="hm-filter-bar">
+      <button class="hm-f${!filterType ? " hm-f-on" : ""}" data-hmf="">All Plays</button>
+      <button class="hm-f${filterType === "run" ? " hm-f-on" : ""}" data-hmf="run">Run</button>
+      <button class="hm-f${filterType === "pass" ? " hm-f-on" : ""}" data-hmf="pass">Pass</button>
+      <span class="hm-total">${totalPlays} play${totalPlays !== 1 ? "s" : ""} charted</span>
+    </div>
+    <div class="hm-field">
+      <div class="hm-ez hm-ez-own"><span>Own End Zone</span></div>
+      <div class="hm-grid-wrap">
+        <div class="hm-zone-row"><div class="hm-hlbl-spc"></div>${zoneHdrs}</div>
+        ${rows}
+      </div>
+      <div class="hm-ez hm-ez-opp"><span>Opp End Zone</span></div>
+    </div>
+    <div class="hm-legend">
+      <span class="hm-leg-item"><span class="hm-swatch" style="background:#E8EBF0"></span>No plays</span>
+      <span class="hm-leg-item"><span class="hm-swatch" style="background:hsl(0,65%,43%)"></span>0% eff</span>
+      <span class="hm-leg-item"><span class="hm-swatch" style="background:hsl(60,65%,43%)"></span>50% eff</span>
+      <span class="hm-leg-item"><span class="hm-swatch" style="background:hsl(120,65%,43%)"></span>100% eff</span>
+    </div>
+    ${noData}
+  </div>`;
+}
+
 // ---------- file export helpers -----------------------------------------------
 
 function downloadFile(filename, content, mime) {
@@ -165,6 +260,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   let scrimmStartSign = -1;
   // Change 4 — TD re-spot state
   let isTouchdown = false;
+  let hmFilter = "";
 
   // Role gates
   const canChart  = userRole !== "readonly";   // add & edit plays
@@ -1434,6 +1530,12 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     document.getElementById("reportOverlay").hidden = true;
   });
   document.getElementById("reportBody").addEventListener("click", (e) => {
+    const hmBtn = e.target.closest("[data-hmf]");
+    if (hmBtn) {
+      hmFilter = hmBtn.getAttribute("data-hmf");
+      document.getElementById("reportBody").innerHTML = buildHeatMap(plays, hmFilter);
+      return;
+    }
     const row = e.target.closest("[data-drill]");
     if (!row) return;
     const callName = row.getAttribute("data-drill");
@@ -1452,7 +1554,9 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     btn.addEventListener("click", () => {
       document.querySelectorAll(".rtab").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
-      renderReportTab(btn.getAttribute("data-tab"));
+      const tab = btn.getAttribute("data-tab");
+      if (tab !== "heatmap") hmFilter = "";
+      renderReportTab(tab);
     });
   });
 
@@ -1575,6 +1679,11 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
         }).join("");
         if (!html) html = '<div class="report-empty">No series data found.</div>';
       }
+    }
+
+    if (tab === "heatmap") {
+      body.innerHTML = buildHeatMap(plays, hmFilter);
+      return;
     }
 
     if (tab === "notes") {
@@ -2161,6 +2270,7 @@ function buildHTML(game, mode) {
         <button class="rtab" data-tab="hash">By Hash</button>
         <button class="rtab" data-tab="players">Players</button>
         <button class="rtab" data-tab="stats">Game Stats</button>
+        <button class="rtab" data-tab="heatmap">Heat Map</button>
         <button class="rtab" id="rtabSeries" data-tab="series" style="display:none">By Series</button>
         <button class="rtab" data-tab="notes">Game Notes</button>
       </div>
