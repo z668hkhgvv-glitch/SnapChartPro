@@ -264,7 +264,19 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
     ...(team?.settings || {}),
     trackPlayers: team?.trackPlayers || false,
     roster: team?.roster || [],
+    rosterSort: team?.rosterSort || "number",
+    library: team?.library || { forms:[], calls:[], motions:[], fronts:[], coverages:[] },
   };
+  const LIB_CATS_PRO = [
+    {key:"forms",    label:"Formations"},
+    {key:"calls",    label:"Play Calls"},
+    {key:"motions",  label:"Motions"},
+    {key:"fronts",   label:"Defensive Fronts"},
+    {key:"coverages",label:"Coverages"},
+  ];
+  function libAlphaSortPro(arr){ return [...arr].sort((a,b)=>a.toLowerCase().localeCompare(b.toLowerCase())); }
+  let localLib = { forms:[...(teamSettings.library.forms||[])], calls:[...(teamSettings.library.calls||[])], motions:[...(teamSettings.library.motions||[])], fronts:[...(teamSettings.library.fronts||[])], coverages:[...(teamSettings.library.coverages||[])] };
+  let libEditingCatPro = null, libEditingIdxPro = -1;
 
   const overlay = document.createElement("div");
   overlay.className = "modal-back";
@@ -371,6 +383,17 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
         <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
           <button class="btn-secondary" id="savePlayerTrackingBtn">Save Player Tracking</button>
           <span id="playerTrackingMsg" style="font-size:12px;display:none"></span>
+        </div>
+      </div>
+
+      <div class="settings-section" style="border-bottom:none;padding-bottom:0;margin-top:4px">
+        <hr style="margin:18px 0;border:none;border-top:1px solid var(--chalk)">
+        <h3 style="margin:0 0 4px;font-size:15px">Autocomplete Library</h3>
+        <p style="font-size:13px;color:var(--slate);margin:0 0 14px">Entries available to all coaches when charting plays. Sorted alphabetically.</p>
+        <div id="proLibAll"></div>
+        <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
+          <button class="btn-secondary" id="saveLibraryBtn">Save Library</button>
+          <span id="libraryMsg" style="font-size:12px;display:none"></span>
         </div>
       </div>
 
@@ -575,6 +598,101 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
     } catch (err) {
       msgEl.style.color = "#DC2626";
       msgEl.textContent = "Error: " + err.message;
+      msgEl.style.display = "inline";
+    }
+  });
+
+  // ---- Autocomplete Library ----
+  function renderProLib() {
+    const el = overlay.querySelector("#proLibAll"); if (!el) return;
+    el.innerHTML = LIB_CATS_PRO.map(cat => {
+      const arr = localLib[cat.key] || [];
+      const rows = arr.length ? arr.map((entry, i) => {
+        if (libEditingCatPro === cat.key && libEditingIdxPro === i) {
+          return `<div class="st-tag-row" style="display:flex;align-items:center;gap:6px">
+            <input class="pro-lib-inp field" data-cat="${esc(cat.key)}" data-idx="${i}" value="${esc(entry)}"
+                   style="flex:1;min-width:0;height:36px;font-size:14px;padding:0 8px;border:1.5px solid var(--chalk);border-radius:8px">
+            <button class="btn-primary pro-lib-save" data-cat="${esc(cat.key)}" data-idx="${i}" style="height:36px;padding:0 12px;font-size:13px">Save</button>
+            <button class="modal-cancel pro-lib-cancel" style="margin:0;height:36px;padding:0 10px;font-size:13px">✕</button>
+          </div>`;
+        }
+        return `<div class="st-tag-row" style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:14px">${esc(entry)}</span>
+          <div style="display:flex;gap:2px;flex-shrink:0">
+            <button class="lib-edit-btn pro-lib-edit" data-cat="${esc(cat.key)}" data-edit="${i}" title="Edit">✎</button>
+            <button class="st-tag-del pro-lib-del" data-cat="${esc(cat.key)}" data-del="${i}" title="Delete">&times;</button>
+          </div>
+        </div>`;
+      }).join("") : `<div class="lib-empty" style="padding:8px 0;color:var(--slate);font-size:13px;font-style:italic">No entries yet.</div>`;
+      return `<div class="lib-section">
+        <div class="lib-section-head">${esc(cat.label)}</div>
+        <div>${rows}</div>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <input id="proLibNew_${cat.key}" class="field" type="text" placeholder="Add ${esc(cat.label.toLowerCase())}…"
+                 style="flex:1;min-width:0;height:38px;padding:0 10px;border:1.5px solid var(--chalk);border-radius:8px;font-size:14px;font-family:var(--body)" autocapitalize="words">
+          <button class="btn-secondary pro-lib-add" data-cat="${esc(cat.key)}" style="flex:0 0 auto;height:38px;padding:0 14px;font-size:13px">+ Add</button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+  renderProLib();
+
+  overlay.querySelector("#proLibAll").addEventListener("click", e => {
+    const del = e.target.closest(".pro-lib-del");
+    if (del) {
+      const cat = del.getAttribute("data-cat"), i = Number(del.getAttribute("data-del"));
+      if (!confirm(`Delete "${localLib[cat][i]}"?`)) return;
+      localLib[cat].splice(i, 1);
+      libEditingCatPro = null; libEditingIdxPro = -1; renderProLib(); return;
+    }
+    const edit = e.target.closest(".pro-lib-edit");
+    if (edit) {
+      libEditingCatPro = edit.getAttribute("data-cat");
+      libEditingIdxPro = Number(edit.getAttribute("data-edit"));
+      renderProLib();
+      const inp = overlay.querySelector(".pro-lib-inp"); if (inp) inp.focus();
+      return;
+    }
+    const save = e.target.closest(".pro-lib-save");
+    if (save) {
+      const cat = save.getAttribute("data-cat"), idx = Number(save.getAttribute("data-idx"));
+      const inp = overlay.querySelector(".pro-lib-inp");
+      const val = (inp ? inp.value : "").trim().replace(/\b\w/g, c => c.toUpperCase());
+      if (val) { localLib[cat][idx] = val; localLib[cat] = libAlphaSortPro(localLib[cat]); }
+      libEditingCatPro = null; libEditingIdxPro = -1; renderProLib(); return;
+    }
+    if (e.target.closest(".pro-lib-cancel")) { libEditingCatPro = null; libEditingIdxPro = -1; renderProLib(); return; }
+    const addBtn = e.target.closest(".pro-lib-add");
+    if (addBtn) {
+      const cat = addBtn.getAttribute("data-cat");
+      const inp = overlay.querySelector(`#proLibNew_${cat}`);
+      const val = (inp ? inp.value : "").trim().replace(/\b\w/g, c => c.toUpperCase());
+      if (!val) return;
+      if (!localLib[cat].map(s => s.toLowerCase()).includes(val.toLowerCase())) {
+        localLib[cat].push(val);
+        localLib[cat] = libAlphaSortPro(localLib[cat]);
+      }
+      if (inp) inp.value = "";
+      renderProLib();
+      const newInp = overlay.querySelector(`#proLibNew_${cat}`); if (newInp) newInp.focus();
+    }
+  });
+  overlay.querySelector("#proLibAll").addEventListener("keydown", e => {
+    if (e.key !== "Enter") return;
+    const saveBtn = overlay.querySelector(".pro-lib-save"); if (saveBtn) { saveBtn.click(); return; }
+    const addInp = e.target.closest('[id^="proLibNew_"]');
+    if (addInp) { const cat = addInp.id.replace("proLibNew_",""); overlay.querySelector(`.pro-lib-add[data-cat="${cat}"]`)?.click(); }
+  });
+
+  overlay.querySelector("#saveLibraryBtn").addEventListener("click", async () => {
+    const msgEl = overlay.querySelector("#libraryMsg");
+    try {
+      await updateTeam(teamId, { library: localLib });
+      msgEl.style.color = "#15803d"; msgEl.textContent = "Saved.";
+      msgEl.style.display = "inline";
+      setTimeout(() => { msgEl.style.display = "none"; }, 2000);
+    } catch (err) {
+      msgEl.style.color = "#DC2626"; msgEl.textContent = "Error: " + err.message;
       msgEl.style.display = "inline";
     }
   });

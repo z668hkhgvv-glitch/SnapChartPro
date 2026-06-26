@@ -558,10 +558,12 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       if (d) { d.hidden = true; d.innerHTML = ""; }
     });
   }
+  const LIB_FIELD_MAP = { form:"forms", call:"calls", motion:"motions", front:"fronts", coverage:"coverages" };
   function getACList(key) {
     const fromPlays = plays.map((p) => p[key] || "");
     const defaults  = key === "form" ? DEFAULT_FORMS : [];
-    return uniqCI(defaults.concat(fromPlays)).sort();
+    const fromLib   = (teamSettings.library && LIB_FIELD_MAP[key]) ? (teamSettings.library[LIB_FIELD_MAP[key]] || []) : [];
+    return uniqCI(defaults.concat(fromLib).concat(fromPlays)).sort();
   }
   function bindAC(inputId, dropId, listKey) {
     const inp  = document.getElementById(inputId);
