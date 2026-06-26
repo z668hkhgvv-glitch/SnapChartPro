@@ -298,224 +298,235 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
   overlay.className = "modal-back";
   overlay.innerHTML = `
     <div class="modal settings-modal">
-      <h2>Settings</h2>
+      <div class="settings-layout">
+        <nav class="settings-nav">
+          <div class="settings-nav-head">Settings</div>
+          <button class="snav-btn active" data-pane="general">General</button>
+          <button class="snav-btn" data-pane="scoring">Scoring</button>
+          <button class="snav-btn" data-pane="library">Library</button>
+          <button class="snav-btn" data-pane="players">Players</button>
+          <button class="snav-btn" data-pane="v7">7v7</button>
+          <button class="snav-btn" data-pane="scrimmage">Scrimmage</button>
+          <button class="snav-btn" data-pane="team">Team</button>
+          <button class="snav-btn" data-pane="data">Data</button>
+          <button id="settingsClose" class="snav-close">&#x2715; Close</button>
+        </nav>
+        <div class="settings-content">
 
-      <div class="settings-section">
-        <div class="settings-label">Team Name</div>
-        <div style="display:flex;gap:8px">
-          <input id="teamNameField" type="text" value="${esc(team?.name || "")}"
-                 style="flex:1;padding:9px 12px;border:2px solid #E5E7EB;
-                        border-radius:8px;font-size:15px;font-family:var(--body)">
-          <button class="btn-secondary" id="saveTeamNameBtn">Save</button>
-        </div>
-        <div style="margin-top:10px">
-          <label style="font-size:14px;color:var(--slate);display:block;margin-bottom:4px">Coach Name</label>
-          <input id="coachNameField" type="text" value="${esc(teamSettings.coachName)}"
-                 placeholder="Head coach name"
-                 style="width:100%;box-sizing:border-box;padding:9px 12px;border:2px solid #E5E7EB;
-                        border-radius:8px;font-size:14px;font-family:var(--body)">
-        </div>
-        <div id="teamNameMsg" style="font-size:12px;margin-top:4px;display:none"></div>
-      </div>
-
-      <div class="settings-section">
-        <div class="settings-label">Default Game Mode</div>
-        <div style="display:flex;gap:0;border:2px solid #E5E7EB;border-radius:8px;overflow:hidden;width:fit-content">
-          ${['standard','7v7','scrimmage'].map(m => {
-            const labels = { standard:'Standard', '7v7':'7v7', scrimmage:'Scrimmage' };
-            return `<button class="mode-seg-btn${m === currentMode ? ' mode-seg-active' : ''}"
-                            data-mode="${m}"
-                            style="padding:8px 18px;font-size:14px;border:none;cursor:pointer;
-                                   font-family:var(--body);
-                                   background:${m === currentMode ? '#16317F' : '#fff'};
-                                   color:${m === currentMode ? '#fff' : '#374151'}">${labels[m]}</button>`;
-          }).join('')}
-        </div>
-        <input type="hidden" id="defaultModeVal" value="${esc(currentMode)}">
-        <div style="margin-top:8px;display:flex;align-items:center;gap:10px">
-          <button class="btn-secondary" id="saveGameModeBtn">Save</button>
-          <span id="gameModeMsg" style="font-size:12px;display:none"></span>
-        </div>
-      </div>
-
-      <div class="settings-section">
-        <div class="settings-label">Team Accent Color</div>
-        <div id="accentColorGrid" style="display:grid;grid-template-columns:repeat(8,28px);gap:8px;margin-bottom:10px">
-          ${ACCENT_COLORS.map(c => `
-            <button class="accent-swatch${c === currentAccent ? ' accent-selected' : ''}"
-                    data-color="${c}"
-                    title="${c}"
-                    style="width:24px;height:24px;border-radius:50%;background:${c};cursor:pointer;
-                           border:${c === currentAccent ? '3px solid #111' : '2px solid transparent'};
-                           box-shadow:${c === currentAccent ? '0 0 0 2px #fff inset' : 'none'};
-                           padding:0;outline:none"></button>`).join('')}
-        </div>
-        <input type="hidden" id="accentColorVal" value="${esc(currentAccent)}">
-        <div style="display:flex;align-items:center;gap:10px">
-          <button class="btn-secondary" id="saveAccentColorBtn">Save</button>
-          <span id="accentColorMsg" style="font-size:12px;display:none"></span>
-        </div>
-      </div>
-
-      <div class="settings-section">
-        <h3 style="margin:0 0 12px;font-size:15px">7v7 Settings</h3>
-        <div class="chart-defaults-grid">
-          <label>Starting Position (yd)</label>
-          <input id="cfg7vStart" type="number" min="1" max="99" value="${currentStart7v7}">
-
-          <label>Line 1 (yd)</label>
-          <input id="cfg7vLine1" type="number" min="1" max="99" value="${currentLine1}">
-
-          <label>Line 2 (yd)</label>
-          <input id="cfg7vLine2" type="number" min="1" max="99" value="${currentLine2}">
-
-          <label>Plays per Series</label>
-          <input id="cfg7vPlays" type="number" min="1" max="20" value="${currentPlays7v7}">
-
-          <label>Effectiveness Mode</label>
-          <select id="cfg7vEff" class="role-sel">
-            <option value="pace"   ${currentEff7v7 === 'pace'   ? 'selected' : ''}>Pace (any 1st down = effective)</option>
-            <option value="strict" ${currentEff7v7 === 'strict' ? 'selected' : ''}>Strict (must advance the line)</option>
-          </select>
-        </div>
-        <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
-          <button class="btn-secondary" id="save7v7Btn">Save 7v7 Settings</button>
-          <span id="v7Msg" style="font-size:12px;display:none"></span>
-        </div>
-      </div>
-
-      <div class="settings-section">
-        <h3 style="margin:0 0 12px;font-size:15px">Scrimmage Settings</h3>
-        <div class="chart-defaults-grid">
-          <label>Ball Movement</label>
-          <select id="cfgScrimMode" class="role-sel">
-            <option value="advance"   ${currentScrimMode === 'advance'   ? 'selected' : ''}>Advance (ball moves after each series)</option>
-            <option value="fixed"     ${currentScrimMode === 'fixed'     ? 'selected' : ''}>Fixed (ball stays at starting spot)</option>
-            <option value="simulated" ${currentScrimMode === 'simulated' ? 'selected' : ''}>Simulated (game-like with downs)</option>
-          </select>
-
-          <label>Plays per Series</label>
-          <input id="cfgEffScrimPlays" type="number" min="1" max="50" value="${currentScrimPlaysEff}">
-        </div>
-        <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
-          <button class="btn-secondary" id="saveScrimBtn">Save Scrimmage Settings</button>
-          <span id="scrimMsg" style="font-size:12px;display:none"></span>
-        </div>
-      </div>
-
-      <div class="settings-section">
-        <div class="settings-label">Coaches</div>
-        <div id="membersList"><div class="loading">Loading&hellip;</div></div>
-      </div>
-
-      <div class="settings-section">
-        <div class="settings-label">Charting Defaults</div>
-        <div class="chart-defaults-grid">
-          <label>Default yards to go</label>
-          <input id="cfgDist" type="number" min="1" max="99" value="${team?.settings?.defaultDist ?? 10}">
-
-          <label>Scrimmage plays/series</label>
-          <input id="cfgScrimmPlays" type="number" min="1" max="50" value="${team?.settings?.scrimmPlays ?? 10}">
-
-          <label>Effective: scrimmage (yds)</label>
-          <input id="cfgEffScrim" type="number" min="0" max="99" value="${team?.settings?.effScrim ?? 5}">
-
-          <label>Effective: 1st down (yds)</label>
-          <input id="cfgEff1" type="number" min="0" max="99" value="${team?.settings?.effStd1 ?? 5}">
-
-          <label>Effective: 2nd down (%&nbsp;of dist)</label>
-          <input id="cfgEff2" type="number" min="0" max="100" value="${team?.settings?.effStd2 ?? 50}">
-
-          <label>Effective: 3rd down (%&nbsp;of dist)</label>
-          <input id="cfgEff3" type="number" min="0" max="100" value="${team?.settings?.effStd3 ?? 100}">
-
-          <label>Effective: 4th down (%&nbsp;of dist)</label>
-          <input id="cfgEff4" type="number" min="0" max="100" value="${team?.settings?.effStd4 ?? 100}">
-        </div>
-        <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
-          <button class="btn-secondary" id="saveChartDefaultsBtn">Save Defaults</button>
-          <span id="chartDefaultsMsg" style="font-size:12px;display:none"></span>
-        </div>
-      </div>
-
-      <div class="settings-section" style="border-bottom:none;padding-bottom:0">
-        <div class="settings-label">Invite a Coach</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <input id="inviteEmail" type="email" placeholder="coach@school.edu"
-                 style="flex:1;min-width:180px;padding:9px 12px;border:2px solid #E5E7EB;
-                        border-radius:8px;font-size:14px;font-family:var(--body)">
-          <select id="inviteRole" class="role-sel">
-            <option value="editor">Editor</option>
-            <option value="readonly">Read-Only</option>
-            <option value="admin">Admin</option>
-          </select>
-          <button class="btn-primary" id="sendInviteBtn">Invite</button>
-        </div>
-        <div id="inviteMsg" style="font-size:12px;margin-top:6px;display:none"></div>
-        <div id="invitesList" style="margin-top:10px"></div>
-      </div>
-
-      <div class="settings-section" style="border-bottom:none;padding-bottom:0;margin-top:4px">
-        <hr style="margin:18px 0;border:none;border-top:1px solid var(--chalk)">
-        <h3 style="margin:0 0 12px;font-size:15px">Player tracking</h3>
-        <label class="toggle-row" style="margin-bottom:10px;display:flex;align-items:center;gap:10px;cursor:pointer">
-          <span>Track passer / receiver / rusher</span>
-          <input type="checkbox" id="stgTrackPlayers" ${teamSettings.trackPlayers ? "checked" : ""}>
-        </label>
-        <div id="rosterSection" style="${teamSettings.trackPlayers ? "" : "display:none"}">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px">
-            <span style="font-size:13px;color:var(--slate)">Roster</span>
-            <div style="display:flex;gap:4px">
-              <button id="rosterSortNum" class="btn-ghost" style="font-size:12px;padding:3px 10px">#</button>
-              <button id="rosterSortName" class="btn-ghost" style="font-size:12px;padding:3px 10px">A–Z</button>
+          <div class="settings-pane" data-pane="general">
+            <div class="settings-label">Team Name</div>
+            <div style="display:flex;gap:8px">
+              <input id="teamNameField" type="text" value="${esc(team?.name || "")}"
+                     style="flex:1;padding:9px 12px;border:2px solid #E5E7EB;
+                            border-radius:8px;font-size:15px;font-family:var(--body)">
+              <button class="btn-secondary" id="saveTeamNameBtn">Save</button>
             </div>
-            <button id="importRosterBtn" class="btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--royal);border:1px solid var(--chalk);background:#fff;border-radius:6px">Import Hudl CSV</button>
-            <input id="rosterCsvInput" type="file" accept=".csv" style="display:none">
+            <div style="margin-top:10px">
+              <label style="font-size:14px;color:var(--slate);display:block;margin-bottom:4px">Coach Name</label>
+              <input id="coachNameField" type="text" value="${esc(teamSettings.coachName)}"
+                     placeholder="Head coach name"
+                     style="width:100%;box-sizing:border-box;padding:9px 12px;border:2px solid #E5E7EB;
+                            border-radius:8px;font-size:14px;font-family:var(--body)">
+            </div>
+            <div id="teamNameMsg" style="font-size:12px;margin-top:4px;display:none"></div>
+
+            <div style="margin-top:20px">
+              <div class="settings-label">Default Game Mode</div>
+              <div style="display:flex;gap:0;border:2px solid #E5E7EB;border-radius:8px;overflow:hidden;width:fit-content">
+                ${['standard','7v7','scrimmage'].map(m => {
+                  const labels = { standard:'Standard', '7v7':'7v7', scrimmage:'Scrimmage' };
+                  return `<button class="mode-seg-btn${m === currentMode ? ' mode-seg-active' : ''}"
+                                  data-mode="${m}"
+                                  style="padding:8px 18px;font-size:14px;border:none;cursor:pointer;
+                                         font-family:var(--body);
+                                         background:${m === currentMode ? '#16317F' : '#fff'};
+                                         color:${m === currentMode ? '#fff' : '#374151'}">${labels[m]}</button>`;
+                }).join('')}
+              </div>
+              <input type="hidden" id="defaultModeVal" value="${esc(currentMode)}">
+              <div style="margin-top:8px;display:flex;align-items:center;gap:10px">
+                <button class="btn-secondary" id="saveGameModeBtn">Save</button>
+                <span id="gameModeMsg" style="font-size:12px;display:none"></span>
+              </div>
+            </div>
+
+            <div style="margin-top:20px">
+              <div class="settings-label">Team Accent Color</div>
+              <div id="accentColorGrid" style="display:grid;grid-template-columns:repeat(8,28px);gap:8px;margin-bottom:10px">
+                ${ACCENT_COLORS.map(c => `
+                  <button class="accent-swatch${c === currentAccent ? ' accent-selected' : ''}"
+                          data-color="${c}"
+                          title="${c}"
+                          style="width:24px;height:24px;border-radius:50%;background:${c};cursor:pointer;
+                                 border:${c === currentAccent ? '3px solid #111' : '2px solid transparent'};
+                                 box-shadow:${c === currentAccent ? '0 0 0 2px #fff inset' : 'none'};
+                                 padding:0;outline:none"></button>`).join('')}
+              </div>
+              <input type="hidden" id="accentColorVal" value="${esc(currentAccent)}">
+              <div style="display:flex;align-items:center;gap:10px">
+                <button class="btn-secondary" id="saveAccentColorBtn">Save</button>
+                <span id="accentColorMsg" style="font-size:12px;display:none"></span>
+              </div>
+            </div>
           </div>
-          <div id="rosterList" style="margin-bottom:10px;max-height:200px;overflow-y:auto"></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <input id="rosterName" type="text" class="field" placeholder="Player name" style="flex:1;min-width:120px;padding:8px 10px;border:1.5px solid var(--chalk);border-radius:8px;font-size:14px;font-family:var(--body)">
-            <input id="rosterJersey" type="text" class="field" placeholder="#" style="width:60px;padding:8px 10px;border:1.5px solid var(--chalk);border-radius:8px;font-size:14px;font-family:var(--body)">
-            <select id="rosterPos" class="field role-sel" style="width:80px">
-              <option value="QB">QB</option>
-              <option value="RB">RB</option>
-              <option value="WR">WR</option>
-              <option value="TE">TE</option>
-              <option value="OL">OL</option>
-              <option value="K">K</option>
-              <option value="Other">Other</option>
-            </select>
-            <button id="addRosterPlayerBtn" class="btn-primary" style="flex:none">Add</button>
+
+          <div class="settings-pane" data-pane="scoring" hidden>
+            <h3 style="margin:0 0 12px;font-size:15px">Charting Defaults</h3>
+            <div class="chart-defaults-grid">
+              <label>Default yards to go</label>
+              <input id="cfgDist" type="number" min="1" max="99" value="${team?.settings?.defaultDist ?? 10}">
+
+              <label>Scrimmage plays/series</label>
+              <input id="cfgScrimmPlays" type="number" min="1" max="50" value="${team?.settings?.scrimmPlays ?? 10}">
+
+              <label>Effective: scrimmage (yds)</label>
+              <input id="cfgEffScrim" type="number" min="0" max="99" value="${team?.settings?.effScrim ?? 5}">
+
+              <label>Effective: 1st down (yds)</label>
+              <input id="cfgEff1" type="number" min="0" max="99" value="${team?.settings?.effStd1 ?? 5}">
+
+              <label>Effective: 2nd down (%&nbsp;of dist)</label>
+              <input id="cfgEff2" type="number" min="0" max="100" value="${team?.settings?.effStd2 ?? 50}">
+
+              <label>Effective: 3rd down (%&nbsp;of dist)</label>
+              <input id="cfgEff3" type="number" min="0" max="100" value="${team?.settings?.effStd3 ?? 100}">
+
+              <label>Effective: 4th down (%&nbsp;of dist)</label>
+              <input id="cfgEff4" type="number" min="0" max="100" value="${team?.settings?.effStd4 ?? 100}">
+            </div>
+            <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
+              <button class="btn-secondary" id="saveChartDefaultsBtn">Save Defaults</button>
+              <span id="chartDefaultsMsg" style="font-size:12px;display:none"></span>
+            </div>
           </div>
-        </div>
-        <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
-          <button class="btn-secondary" id="savePlayerTrackingBtn">Save Player Tracking</button>
-          <span id="playerTrackingMsg" style="font-size:12px;display:none"></span>
+
+          <div class="settings-pane" data-pane="library" hidden>
+            <h3 style="margin:0 0 4px;font-size:15px">Autocomplete Library</h3>
+            <p style="font-size:13px;color:var(--slate);margin:0 0 14px">Entries available to all coaches when charting plays. Sorted alphabetically.</p>
+            <div id="proLibAll"></div>
+            <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
+              <button class="btn-secondary" id="saveLibraryBtn">Save Library</button>
+              <span id="libraryMsg" style="font-size:12px;display:none"></span>
+            </div>
+          </div>
+
+          <div class="settings-pane" data-pane="players" hidden>
+            <h3 style="margin:0 0 12px;font-size:15px">Player Tracking</h3>
+            <label class="toggle-row" style="margin-bottom:10px;display:flex;align-items:center;gap:10px;cursor:pointer">
+              <span>Track passer / receiver / rusher</span>
+              <input type="checkbox" id="stgTrackPlayers" ${teamSettings.trackPlayers ? "checked" : ""}>
+            </label>
+            <div id="rosterSection" style="${teamSettings.trackPlayers ? "" : "display:none"}">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px">
+                <span style="font-size:13px;color:var(--slate)">Roster</span>
+                <div style="display:flex;gap:4px">
+                  <button id="rosterSortNum" class="btn-ghost" style="font-size:12px;padding:3px 10px">#</button>
+                  <button id="rosterSortName" class="btn-ghost" style="font-size:12px;padding:3px 10px">A–Z</button>
+                </div>
+                <button id="importRosterBtn" class="btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--royal);border:1px solid var(--chalk);background:#fff;border-radius:6px">Import Hudl CSV</button>
+                <input id="rosterCsvInput" type="file" accept=".csv" style="display:none">
+              </div>
+              <div id="rosterList" style="margin-bottom:10px;max-height:200px;overflow-y:auto"></div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <input id="rosterName" type="text" class="field" placeholder="Player name" style="flex:1;min-width:120px;padding:8px 10px;border:1.5px solid var(--chalk);border-radius:8px;font-size:14px;font-family:var(--body)">
+                <input id="rosterJersey" type="text" class="field" placeholder="#" style="width:60px;padding:8px 10px;border:1.5px solid var(--chalk);border-radius:8px;font-size:14px;font-family:var(--body)">
+                <select id="rosterPos" class="field role-sel" style="width:80px">
+                  <option value="QB">QB</option>
+                  <option value="RB">RB</option>
+                  <option value="WR">WR</option>
+                  <option value="TE">TE</option>
+                  <option value="OL">OL</option>
+                  <option value="K">K</option>
+                  <option value="Other">Other</option>
+                </select>
+                <button id="addRosterPlayerBtn" class="btn-primary" style="flex:none">Add</button>
+              </div>
+            </div>
+            <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
+              <button class="btn-secondary" id="savePlayerTrackingBtn">Save Player Tracking</button>
+              <span id="playerTrackingMsg" style="font-size:12px;display:none"></span>
+            </div>
+          </div>
+
+          <div class="settings-pane" data-pane="v7" hidden>
+            <h3 style="margin:0 0 12px;font-size:15px">7v7 Settings</h3>
+            <div class="chart-defaults-grid">
+              <label>Starting Position (yd)</label>
+              <input id="cfg7vStart" type="number" min="1" max="99" value="${currentStart7v7}">
+
+              <label>Line 1 (yd)</label>
+              <input id="cfg7vLine1" type="number" min="1" max="99" value="${currentLine1}">
+
+              <label>Line 2 (yd)</label>
+              <input id="cfg7vLine2" type="number" min="1" max="99" value="${currentLine2}">
+
+              <label>Plays per Series</label>
+              <input id="cfg7vPlays" type="number" min="1" max="20" value="${currentPlays7v7}">
+
+              <label>Effectiveness Mode</label>
+              <select id="cfg7vEff" class="role-sel">
+                <option value="pace"   ${currentEff7v7 === 'pace'   ? 'selected' : ''}>Pace (any 1st down = effective)</option>
+                <option value="strict" ${currentEff7v7 === 'strict' ? 'selected' : ''}>Strict (must advance the line)</option>
+              </select>
+            </div>
+            <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
+              <button class="btn-secondary" id="save7v7Btn">Save 7v7 Settings</button>
+              <span id="v7Msg" style="font-size:12px;display:none"></span>
+            </div>
+          </div>
+
+          <div class="settings-pane" data-pane="scrimmage" hidden>
+            <h3 style="margin:0 0 12px;font-size:15px">Scrimmage Settings</h3>
+            <div class="chart-defaults-grid">
+              <label>Ball Movement</label>
+              <select id="cfgScrimMode" class="role-sel">
+                <option value="advance"   ${currentScrimMode === 'advance'   ? 'selected' : ''}>Advance (ball moves after each series)</option>
+                <option value="fixed"     ${currentScrimMode === 'fixed'     ? 'selected' : ''}>Fixed (ball stays at starting spot)</option>
+                <option value="simulated" ${currentScrimMode === 'simulated' ? 'selected' : ''}>Simulated (game-like with downs)</option>
+              </select>
+
+              <label>Plays per Series</label>
+              <input id="cfgEffScrimPlays" type="number" min="1" max="50" value="${currentScrimPlaysEff}">
+            </div>
+            <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
+              <button class="btn-secondary" id="saveScrimBtn">Save Scrimmage Settings</button>
+              <span id="scrimMsg" style="font-size:12px;display:none"></span>
+            </div>
+          </div>
+
+          <div class="settings-pane" data-pane="team" hidden>
+            <div class="settings-label">Coaches</div>
+            <div id="membersList"><div class="loading">Loading&hellip;</div></div>
+
+            <div style="margin-top:20px">
+              <div class="settings-label">Invite a Coach</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <input id="inviteEmail" type="email" placeholder="coach@school.edu"
+                       style="flex:1;min-width:180px;padding:9px 12px;border:2px solid #E5E7EB;
+                              border-radius:8px;font-size:14px;font-family:var(--body)">
+                <select id="inviteRole" class="role-sel">
+                  <option value="editor">Editor</option>
+                  <option value="readonly">Read-Only</option>
+                  <option value="admin">Admin</option>
+                </select>
+                <button class="btn-primary" id="sendInviteBtn">Invite</button>
+              </div>
+              <div id="inviteMsg" style="font-size:12px;margin-top:6px;display:none"></div>
+              <div id="invitesList" style="margin-top:10px"></div>
+            </div>
+          </div>
+
+          <div class="settings-pane" data-pane="data" hidden>
+            <h3 style="margin:0 0 8px;font-size:15px">Export Data</h3>
+            <p style="font-size:13px;color:var(--slate);margin:0 0 12px">Download all games and settings as a JSON file for backup or external analysis.</p>
+            <div style="display:flex;align-items:center;gap:10px">
+              <button class="btn-secondary" id="exportJsonBtn">Export Team Data (JSON)</button>
+              <span id="exportMsg" style="font-size:12px;display:none"></span>
+            </div>
+          </div>
+
         </div>
       </div>
-
-      <div class="settings-section" style="border-bottom:none;padding-bottom:0;margin-top:4px">
-        <hr style="margin:18px 0;border:none;border-top:1px solid var(--chalk)">
-        <h3 style="margin:0 0 4px;font-size:15px">Autocomplete Library</h3>
-        <p style="font-size:13px;color:var(--slate);margin:0 0 14px">Entries available to all coaches when charting plays. Sorted alphabetically.</p>
-        <div id="proLibAll"></div>
-        <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
-          <button class="btn-secondary" id="saveLibraryBtn">Save Library</button>
-          <span id="libraryMsg" style="font-size:12px;display:none"></span>
-        </div>
-      </div>
-
-      <div class="settings-section" style="border-bottom:none;padding-bottom:0;margin-top:4px">
-        <hr style="margin:18px 0;border:none;border-top:1px solid var(--chalk)">
-        <h3 style="margin:0 0 8px;font-size:15px">Export Data</h3>
-        <p style="font-size:13px;color:var(--slate);margin:0 0 12px">Download all games and settings as a JSON file for backup or external analysis.</p>
-        <div style="display:flex;align-items:center;gap:10px">
-          <button class="btn-secondary" id="exportJsonBtn">Export Team Data (JSON)</button>
-          <span id="exportMsg" style="font-size:12px;display:none"></span>
-        </div>
-      </div>
-
-      <button class="modal-cancel" id="settingsClose" style="margin-top:16px">Close</button>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -525,6 +536,16 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
   );
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) document.body.removeChild(overlay);
+  });
+
+  // Settings nav switching
+  overlay.querySelectorAll(".snav-btn[data-pane]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      overlay.querySelectorAll(".snav-btn[data-pane]").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      overlay.querySelectorAll(".settings-pane").forEach(p => { p.hidden = true; });
+      overlay.querySelector(`.settings-pane[data-pane="${btn.dataset.pane}"]`).hidden = false;
+    });
   });
 
   // Save team name + coach name
