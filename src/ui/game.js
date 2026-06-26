@@ -109,6 +109,156 @@ function advanceBallOn(ylStr, yards) {
   return { yl: String(Math.round(newYl) || 50), sign: newSign };
 }
 
+// ---------- red zone analysis ------------------------------------------------
+
+export function buildRedZone(playsArr) {
+  function posFromYl(yl) {
+    const n = Number(yl);
+    if (yl === "" || yl == null || isNaN(n)) return null;
+    return n >= 0 ? n : 100 + n;
+  }
+  function row(label, n, succ, yards) {
+    const ep = n ? Math.round(100 * succ / n) : 0;
+    const color = ep >= 50 ? "#15803d" : "#b91c1c";
+    const avg = n ? (yards / n).toFixed(1) : "0.0";
+    return `<div class="rpt-row">
+      <div class="rpt-label">${label}</div>
+      <div class="rpt-stats">
+        <span class="rpt-n">${n} play${n !== 1 ? "s" : ""}</span>
+        <span class="rpt-avg">${n && yards / n > 0 ? "+" : ""}${avg} yds/play</span>
+        <span class="rpt-eff" style="color:${color}">${ep}% effective</span>
+      </div>
+      <div class="rpt-bar-wrap"><div class="rpt-bar" style="width:${ep}%"></div></div>
+    </div>`;
+  }
+  function secHead(title) {
+    return `<div style="font-family:var(--num);text-transform:uppercase;letter-spacing:.06em;font-size:11px;font-weight:700;color:var(--royal);padding:4px 0 5px;border-bottom:2px solid var(--chalk);margin:18px 0 10px">${title}</div>`;
+  }
+  function statCard(val, lbl) {
+    return `<div style="background:var(--chalk);border-radius:10px;padding:12px 8px;text-align:center">
+      <div style="font-family:var(--num);font-size:22px;font-weight:700;color:var(--royal);line-height:1.1">${val}</div>
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);margin-top:4px">${lbl}</div>
+    </div>`;
+  }
+
+  const rzPlays = playsArr.filter((p) => {
+    const pos = posFromYl(p.yl);
+    return pos !== null && pos >= 80 && p.type !== "punt";
+  });
+
+  if (!rzPlays.length) {
+    return `<div style="padding:28px 16px;text-align:center;color:var(--slate)">
+      <div style="font-size:15px;font-weight:700;margin-bottom:6px">No red zone plays yet</div>
+      <div style="font-size:13px">Red zone = inside the opponent's 20 yard line.<br>Log plays with the ball-on field set inside their 20.</div>
+    </div>`;
+  }
+
+  const total = rzPlays.length;
+  const successes = rzPlays.filter((p) => p.success).length;
+  const effPct = Math.round(100 * successes / total);
+  const totalYds = rzPlays.reduce((a, p) => a + (Number(p.yards) || 0), 0);
+  const avgYds = total ? (totalYds / total).toFixed(1) : "0.0";
+
+  const runs = rzPlays.filter((p) => p.type === "run");
+  const passes = rzPlays.filter((p) => p.type === "pass");
+  const runSucc = runs.filter((p) => p.success).length;
+  const passSucc = passes.filter((p) => p.success).length;
+  const runYds = runs.reduce((a, p) => a + (Number(p.yards) || 0), 0);
+  const passYds = passes.reduce((a, p) => a + (Number(p.yards) || 0), 0);
+
+  const szPlays = rzPlays.filter((p) => { const pos = posFromYl(p.yl); return pos >= 80 && pos <= 89; });
+  const drPlays = rzPlays.filter((p) => { const pos = posFromYl(p.yl); return pos >= 90; });
+  const szSucc = szPlays.filter((p) => p.success).length;
+  const drSucc = drPlays.filter((p) => p.success).length;
+  const szYds = szPlays.reduce((a, p) => a + (Number(p.yards) || 0), 0);
+  const drYds = drPlays.reduce((a, p) => a + (Number(p.yards) || 0), 0);
+
+  const downMap = {};
+  rzPlays.forEach((p) => {
+    const d = String(p.down || "");
+    if (!d) return;
+    if (!downMap[d]) downMap[d] = { count: 0, succ: 0, yards: 0 };
+    downMap[d].count++; if (p.success) downMap[d].succ++; downMap[d].yards += Number(p.yards) || 0;
+  });
+
+  const hashData = { L: { count: 0, succ: 0, yards: 0 }, M: { count: 0, succ: 0, yards: 0 }, R: { count: 0, succ: 0, yards: 0 } };
+  const hashLabels = { L: "Left Hash", M: "Middle", R: "Right Hash" };
+  rzPlays.forEach((p) => {
+    const h = p.hash;
+    if (hashData[h]) { hashData[h].count++; if (p.success) hashData[h].succ++; hashData[h].yards += Number(p.yards) || 0; }
+  });
+
+  const callMap = {};
+  rzPlays.forEach((p) => {
+    const k = (p.call || "(no call)").trim();
+    if (!callMap[k]) callMap[k] = { count: 0, succ: 0, yards: 0 };
+    callMap[k].count++; if (p.success) callMap[k].succ++; callMap[k].yards += Number(p.yards) || 0;
+  });
+  const topCalls = Object.values(callMap)
+    .map((c, i) => ({ name: Object.keys(callMap)[i], ...c }))
+    .filter((c) => c.count >= 2)
+    .sort((a, b) => (b.count ? b.succ / b.count : 0) - (a.count ? a.succ / a.count : 0))
+    .slice(0, 8);
+
+  // Fix topCalls — Object.values doesn't preserve key mapping
+  const topCallsFixed = Object.entries(callMap)
+    .map(([name, c]) => ({ name, ...c }))
+    .filter((c) => c.count >= 2)
+    .sort((a, b) => (b.count ? b.succ / b.count : 0) - (a.count ? a.succ / a.count : 0))
+    .slice(0, 8);
+
+  const runPct = total ? Math.round(100 * runs.length / total) : 0;
+  const ordinals = { 1: "1st", 2: "2nd", 3: "3rd", 4: "4th" };
+
+  let html = "";
+
+  html += secHead("Overview");
+  html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+    ${statCard(total, "RZ Plays")}
+    ${statCard(effPct + "%", "Success Rate")}
+    ${statCard((Number(avgYds) > 0 ? "+" : "") + avgYds, "Yds / Play")}
+    ${statCard(runs.length + " / " + passes.length, "Run / Pass")}
+  </div>`;
+
+  html += secHead("By Zone");
+  html += row('Scoring Zone <span style="font-weight:400;font-size:12px">(Opp 20–11)</span>', szPlays.length, szSucc, szYds);
+  if (drPlays.length) html += row('Deep Red Zone <span style="font-weight:400;font-size:12px">(Opp 10–1)</span>', drPlays.length, drSucc, drYds);
+
+  html += secHead("Run vs Pass");
+  if (runs.length) html += row("Run", runs.length, runSucc, runYds);
+  if (passes.length) html += row("Pass", passes.length, passSucc, passYds);
+  html += `<div style="margin:4px 0 6px;background:#F3F4F6;border-radius:6px;height:8px;overflow:hidden;display:flex">
+    <div style="width:${runPct}%;background:var(--royal)"></div>
+    <div style="flex:1;background:var(--royal-2)"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--slate);margin-bottom:16px">
+    <span>&#9632; Run ${runPct}%</span><span>Pass ${100 - runPct}% &#9632;</span>
+  </div>`;
+
+  if (Object.keys(downMap).length) {
+    html += secHead("By Down");
+    [1, 2, 3, 4].forEach((d) => {
+      const bd = downMap[String(d)];
+      if (!bd || !bd.count) return;
+      html += row(ordinals[d] + " Down", bd.count, bd.succ, bd.yards);
+    });
+  }
+
+  html += secHead("By Hash");
+  ["L", "M", "R"].forEach((h) => {
+    const hd = hashData[h];
+    if (!hd || !hd.count) return;
+    html += row(hashLabels[h], hd.count, hd.succ, hd.yards);
+  });
+
+  if (topCallsFixed.length) {
+    html += secHead('Best Plays in Red Zone <span style="font-weight:400;font-size:11px;text-transform:none;letter-spacing:0">(2+ snaps)</span>');
+    topCallsFixed.forEach((c) => html += row(esc(c.name), c.count, c.succ, c.yards));
+  }
+
+  return html;
+}
+
 // ---------- heat map ----------------------------------------------------------
 
 export function buildHeatMap(playsArr, filterType) {
@@ -1686,6 +1836,11 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       return;
     }
 
+    if (tab === "redzone") {
+      body.innerHTML = buildRedZone(plays);
+      return;
+    }
+
     if (tab === "notes") {
       const noted = plays.filter(p => p.note && String(p.note).trim() !== "");
       if (!noted.length) {
@@ -2271,6 +2426,7 @@ function buildHTML(game, mode) {
         <button class="rtab" data-tab="players">Players</button>
         <button class="rtab" data-tab="stats">Game Stats</button>
         <button class="rtab" data-tab="heatmap">Heat Map</button>
+        <button class="rtab" data-tab="redzone">Red Zone</button>
         <button class="rtab" id="rtabSeries" data-tab="series" style="display:none">By Series</button>
         <button class="rtab" data-tab="notes">Game Notes</button>
       </div>

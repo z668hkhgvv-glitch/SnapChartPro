@@ -7,7 +7,7 @@ import {
   updateMemberRole, removeMember,
   getPlays, getSeasons, archiveSeason,
 } from "../db.js";
-import { renderGame, buildHeatMap } from "./game.js";
+import { renderGame, buildHeatMap, buildRedZone } from "./game.js";
 
 // ── Hudl CSV roster import helper ────────────────────────────────────────────
 
@@ -1315,6 +1315,7 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
               <span style="font-family:var(--num);font-size:14px">${np} plays · <span style="color:#15803d">${rp}%</span> eff · ${avgp >= 0 ? "+" : ""}${avgp} yds/play</span>
               <button class="btn-secondary sr-view-btn" data-view-game="${esc(g.id)}">View</button>
               <button class="btn-secondary" data-hm-game="${esc(g.id)}">Heat Map</button>
+              <button class="btn-secondary" data-rz-game="${esc(g.id)}">Red Zone</button>
             </div>
           </div>
           <div id="sr-gd-${esc(g.id)}" style="display:none;margin-top:12px">
@@ -1349,6 +1350,21 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
         hmModalFilter = "";
         document.getElementById("srDrillTitle").textContent = "Heat Map — " + gameName;
         document.getElementById("srDrillBody").innerHTML = buildHeatMap(g.plays, "");
+        document.getElementById("srDrillModal").hidden = false;
+      });
+    });
+
+    // Wire red zone buttons
+    body.querySelectorAll("[data-rz-game]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-rz-game");
+        const g = activeGames.find((g) => g.id === id);
+        if (!g) return;
+        const gameName = g.opponent ? "vs " + g.opponent : "Untitled game";
+        hmModalPlays = null;
+        hmModalFilter = "";
+        document.getElementById("srDrillTitle").textContent = "Red Zone — " + gameName;
+        document.getElementById("srDrillBody").innerHTML = buildRedZone(g.plays);
         document.getElementById("srDrillModal").hidden = false;
       });
     });
