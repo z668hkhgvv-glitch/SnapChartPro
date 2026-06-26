@@ -343,8 +343,12 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
           <input type="checkbox" id="stgTrackPlayers" ${teamSettings.trackPlayers ? "checked" : ""}>
         </label>
         <div id="rosterSection" style="${teamSettings.trackPlayers ? "" : "display:none"}">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px">
             <span style="font-size:13px;color:var(--slate)">Roster</span>
+            <div style="display:flex;gap:4px">
+              <button id="rosterSortNum" class="btn-ghost" style="font-size:12px;padding:3px 10px">#</button>
+              <button id="rosterSortName" class="btn-ghost" style="font-size:12px;padding:3px 10px">A–Z</button>
+            </div>
             <button id="importRosterBtn" class="btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--royal);border:1px solid var(--chalk);background:#fff;border-radius:6px">Import Hudl CSV</button>
             <input id="rosterCsvInput" type="file" accept=".csv" style="display:none">
           </div>
@@ -472,15 +476,36 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
 
   // ---- Player tracking roster wiring ----
   let localRoster = (teamSettings.roster || []).slice();
+  let localRosterSort = teamSettings.rosterSort || "number";
 
+  function sortedLocalRoster() {
+    return localRoster.slice().sort((a, b) =>
+      localRosterSort === "name"
+        ? a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+        : (Number(a.jersey) || 0) - (Number(b.jersey) || 0)
+    );
+  }
+  function paintSortBtnsDash() {
+    const numBtn  = overlay.querySelector("#rosterSortNum");
+    const nameBtn = overlay.querySelector("#rosterSortName");
+    if (!numBtn || !nameBtn) return;
+    const byNum = localRosterSort !== "name";
+    numBtn.style.background  = byNum  ? "var(--royal)" : "";
+    numBtn.style.color       = byNum  ? "#fff"         : "";
+    numBtn.style.borderColor = byNum  ? "var(--royal)" : "";
+    nameBtn.style.background = !byNum ? "var(--royal)" : "";
+    nameBtn.style.color      = !byNum ? "#fff"         : "";
+    nameBtn.style.borderColor= !byNum ? "var(--royal)" : "";
+  }
   function renderRosterListDash() {
     const listEl = overlay.querySelector("#rosterList");
     if (!listEl) return;
+    paintSortBtnsDash();
     if (!localRoster.length) {
       listEl.innerHTML = '<div style="font-size:13px;color:var(--slate);padding:6px 0">No players yet.</div>';
       return;
     }
-    listEl.innerHTML = localRoster.map(p => `
+    listEl.innerHTML = sortedLocalRoster().map(p => `
       <div class="roster-player">
         <span class="roster-jersey">#${esc(p.jersey)}</span>
         <span class="roster-name">${esc(p.name)}</span>
@@ -492,6 +517,12 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
 
   overlay.querySelector("#stgTrackPlayers").addEventListener("change", function() {
     overlay.querySelector("#rosterSection").style.display = this.checked ? "" : "none";
+  });
+  overlay.querySelector("#rosterSortNum").addEventListener("click", () => {
+    localRosterSort = "number"; renderRosterListDash();
+  });
+  overlay.querySelector("#rosterSortName").addEventListener("click", () => {
+    localRosterSort = "name"; renderRosterListDash();
   });
 
   overlay.querySelector("#addRosterPlayerBtn").addEventListener("click", () => {
@@ -535,6 +566,7 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
       await updateTeam(teamId, {
         trackPlayers: overlay.querySelector("#stgTrackPlayers").checked,
         roster: localRoster,
+        rosterSort: localRosterSort,
       });
       msgEl.style.color = "#15803d";
       msgEl.textContent = "Saved.";

@@ -416,19 +416,15 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
 
   // ---- player tracking helpers ----
   function populatePlayerDropdowns() {
-    const roster = (teamSettings.roster || []);
-    const passerPrefs   = ["QB","Other"];
-    const receiverPrefs = ["WR","TE","RB","Other"];
-    const rusherPrefs   = ["RB","QB","WR","Other"];
-    [[document.getElementById("fPasser"), passerPrefs],
-     [document.getElementById("fReceiver"), receiverPrefs],
-     [document.getElementById("fRusher"), rusherPrefs]].forEach(([el, prefs]) => {
+    const byName = (teamSettings.rosterSort === "name");
+    const sorted = [...(teamSettings.roster || [])].sort((a, b) =>
+      byName
+        ? a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+        : (Number(a.jersey) || 0) - (Number(b.jersey) || 0)
+    );
+    ["fPasser", "fReceiver", "fRusher"].forEach(selId => {
+      const el = document.getElementById(selId);
       if (!el) return;
-      const sorted = [...roster].sort((a, b) => {
-        const ai = prefs.indexOf(a.pos) === -1 ? 99 : prefs.indexOf(a.pos);
-        const bi = prefs.indexOf(b.pos) === -1 ? 99 : prefs.indexOf(b.pos);
-        return ai !== bi ? ai - bi : (Number(a.jersey)||0) - (Number(b.jersey)||0);
-      });
       const prev = el.value;
       el.innerHTML = '<option value="">— select —</option>' +
         sorted.map(p => `<option value="${esc(p.id)}">#${esc(p.jersey)} ${esc(p.name)} (${esc(p.pos)})</option>`).join("");
