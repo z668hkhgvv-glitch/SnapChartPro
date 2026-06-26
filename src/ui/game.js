@@ -550,6 +550,272 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     return html || '<div class="report-empty">No player data logged yet this game.</div>';
   }
 
+  function buildGameStats() {
+    if (!plays.length) return '<div class="report-empty">No plays logged yet.</div>';
+
+    const pct = (n, d) => d ? Math.round(100 * n / d) + "%" : "—";
+    const yavg = (total, count) => count ? (total / count).toFixed(1) : "—";
+    const signYds = (n) => n > 0 ? "+" + n : String(n);
+    const esc2 = (s) => esc(s || "");
+
+    const card = (val, lbl, sub) =>
+      `<div style="background:var(--chalk,#F1F5F9);border-radius:10px;padding:12px 8px;text-align:center">
+        <div style="font-family:var(--num,Oswald);font-size:22px;font-weight:700;color:var(--royal,#16317F);line-height:1.1">${val}</div>
+        <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--slate,#6B7280);margin-top:4px">${lbl}</div>
+        ${sub ? `<div style="font-size:10px;color:var(--slate);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sub}</div>` : ""}
+      </div>`;
+
+    const grid = (cards, cols = 3) =>
+      `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:8px;margin-bottom:8px">${cards.join("")}</div>`;
+
+    const secHead = (title) =>
+      `<div style="font-family:var(--num,Oswald);text-transform:uppercase;letter-spacing:.06em;font-size:11px;font-weight:700;color:var(--royal,#16317F);padding:4px 0 5px;border-bottom:2px solid var(--chalk,#E8EEF9);margin:18px 0 10px">${title}</div>`;
+
+    const runs     = plays.filter(p => p.type === "run");
+    const passes   = plays.filter(p => p.type === "pass");
+    const punts    = plays.filter(p => p.type === "punt");
+    const scrimmage = plays.filter(p => p.type !== "punt");
+
+    const totalYards = plays.reduce((s, p) => s + (Number(p.yards) || 0), 0);
+    const rushYards  = runs.reduce((s, p) => s + (Number(p.yards) || 0), 0);
+    const passYards  = passes.reduce((s, p) => s + (Number(p.yards) || 0), 0);
+
+    const effAll    = plays.filter(p => p.success).length;
+    const effRuns   = runs.filter(p => p.success).length;
+    const effPasses = passes.filter(p => p.success).length;
+
+    const firstDowns = scrimmage.filter(p => (Number(p.yards) || 0) >= (Number(p.dist) || 10));
+
+    const longestOf = arr => arr.length ? arr.reduce((best, p) =>
+      (Number(p.yards) || 0) > (Number(best.yards) || 0) ? p : best, arr[0]) : null;
+    const longestPlay = longestOf(scrimmage);
+    const longestRun  = longestOf(runs);
+    const longestPass = longestOf(passes);
+
+    const negRuns   = runs.filter(p => (Number(p.yards) || 0) < 0);
+    const negPasses = passes.filter(p => (Number(p.yards) || 0) < 0);
+    const allNeg    = scrimmage.filter(p => (Number(p.yards) || 0) < 0);
+    const negYards  = allNeg.reduce((s, p) => s + (Number(p.yards) || 0), 0);
+    const biggestLossPlay = allNeg.length ? allNeg.reduce((worst, p) =>
+      (Number(p.yards) || 0) < (Number(worst.yards) || 0) ? p : worst, allNeg[0]) : null;
+
+    const downStats = (d) => {
+      const sub = plays.filter(p => Number(p.down) === d);
+      const yds = sub.reduce((s, p) => s + (Number(p.yards) || 0), 0);
+      const convs = sub.filter(p => (Number(p.yards) || 0) >= (Number(p.dist) || 10)).length;
+      const eff = sub.filter(p => p.success).length;
+      return { n: sub.length, yds, convs, eff, ypp: sub.length ? (yds / sub.length).toFixed(1) : "0.0" };
+    };
+    const [d1, d2, d3, d4] = [1, 2, 3, 4].map(downStats);
+
+    const s2short = plays.filter(p => Number(p.down) === 2 && (Number(p.dist) || 10) <= 3);
+    const s2long  = plays.filter(p => Number(p.down) === 2 && (Number(p.dist) || 10) >= 8);
+    const s3short = plays.filter(p => Number(p.down) === 3 && (Number(p.dist) || 10) <= 3);
+    const s3long  = plays.filter(p => Number(p.down) === 3 && (Number(p.dist) || 10) >= 8);
+
+    const drives = [];
+    let curDr = [];
+    for (const pl of plays) {
+      curDr.push(pl);
+      if (pl.type === "punt" || (Number(pl.down) === 4 && !pl.success)) {
+        drives.push([...curDr]); curDr = [];
+      }
+    }
+    if (curDr.length) drives.push(curDr);
+
+    const totalDriveYards = drives.reduce((s, d) => s + d.reduce((sy, p) => sy + (Number(p.yards) || 0), 0), 0);
+    const threeAndOuts = drives.filter(d => {
+      const last = d[d.length - 1];
+      const nonPunt = d.filter(p => p.type !== "punt").length;
+      return last.type === "punt" && nonPunt <= 3;
+    }).length;
+    const turnoverOnDowns = drives.filter(d => {
+      const last = d[d.length - 1];
+      return Number(last.down) === 4 && !last.success;
+    }).length;
+
+    const exp10 = scrimmage.filter(p => (Number(p.yards) || 0) >= 10).length;
+    const exp15 = scrimmage.filter(p => (Number(p.yards) || 0) >= 15).length;
+    const exp20 = scrimmage.filter(p => (Number(p.yards) || 0) >= 20).length;
+
+    const hasDowns  = plays.some(p => p.down);
+    const hasQtrs   = plays.some(p => p.qtr);
+    const hasSeries = plays.some(p => p.series);
+
+    let html = `<div style="padding:4px 0 24px">`;
+
+    // Overview
+    html += secHead("Offense Overview");
+    html += grid([
+      card(plays.length, "Total Plays"),
+      card(signYds(totalYards), "Net Yards"),
+      card(yavg(totalYards, plays.length), "Yards / Play"),
+      card(firstDowns.length, "1st Downs"),
+      card(pct(effAll, plays.length), "Overall Eff."),
+      card(punts.length, "Punts"),
+    ]);
+    if (longestPlay) {
+      html += `<div style="font-size:12px;color:var(--slate);text-align:center;margin-bottom:6px">Longest play: <b style="font-family:var(--num)">${Number(longestPlay.yards) || 0} yds</b>${longestPlay.call ? " &middot; " + esc2(longestPlay.call) : ""}</div>`;
+    }
+
+    // Run game
+    if (runs.length) {
+      html += secHead("Run Game");
+      html += grid([
+        card(runs.length, "Carries"),
+        card(rushYards, "Rush Yards"),
+        card(yavg(rushYards, runs.length), "Yards / Carry"),
+        card(pct(effRuns, runs.length), "Rush Eff."),
+        card(longestRun ? (Number(longestRun.yards) || 0) + " yds" : "—", "Longest Run", longestRun?.call ? esc2(longestRun.call) : ""),
+        card(negRuns.length, "Neg. Runs"),
+      ]);
+    }
+
+    // Pass game
+    if (passes.length) {
+      html += secHead("Pass Game");
+      html += grid([
+        card(passes.length, "Attempts"),
+        card(passYards, "Pass Yards"),
+        card(yavg(passYards, passes.length), "Yards / Att."),
+        card(pct(effPasses, passes.length), "Pass Eff."),
+        card(longestPass ? (Number(longestPass.yards) || 0) + " yds" : "—", "Longest Pass", longestPass?.call ? esc2(longestPass.call) : ""),
+        card(negPasses.length, "Sacks / Losses"),
+      ]);
+    }
+
+    // Down & distance
+    if (hasDowns) {
+      html += secHead("Down &amp; Distance");
+      html += `<div class="table-scroll"><table style="font-size:13px"><thead><tr>
+        <th style="text-align:left">Down</th><th>Plays</th><th>Conv.</th><th>Conv %</th><th>Avg Yds</th><th>Eff %</th>
+        </tr></thead><tbody>`;
+      [[1,"1st",d1],[2,"2nd",d2],[3,"3rd",d3],[4,"4th",d4]].forEach(([, lbl, ds]) => {
+        if (!ds.n) return;
+        const yppColor = Number(ds.ypp) >= 0 ? "#15803d" : "#b91c1c";
+        html += `<tr>
+          <td><b>${lbl} Down</b></td>
+          <td style="font-family:var(--num);text-align:center">${ds.n}</td>
+          <td style="font-family:var(--num);text-align:center">${ds.convs}/${ds.n}</td>
+          <td style="font-family:var(--num);text-align:center"><b>${pct(ds.convs, ds.n)}</b></td>
+          <td style="font-family:var(--num);text-align:center;color:${yppColor}">${Number(ds.ypp) >= 0 ? "+" : ""}${ds.ypp}</td>
+          <td style="font-family:var(--num);text-align:center">${pct(ds.eff, ds.n)}</td>
+        </tr>`;
+      });
+      html += `</tbody></table></div>`;
+
+      const sitCards = [];
+      if (s2short.length) { const c = s2short.filter(p => (Number(p.yards)||0) >= (Number(p.dist)||3)).length; sitCards.push(card(pct(c,s2short.length), "2nd &amp; Short (≤3)", s2short.length + " plays")); }
+      if (s2long.length)  { const c = s2long.filter(p => (Number(p.yards)||0) >= (Number(p.dist)||8)).length;  sitCards.push(card(pct(c,s2long.length),  "2nd &amp; Long (8+)",  s2long.length  + " plays")); }
+      if (s3short.length) { const c = s3short.filter(p => (Number(p.yards)||0) >= (Number(p.dist)||3)).length; sitCards.push(card(pct(c,s3short.length), "3rd &amp; Short (≤3)", s3short.length + " plays")); }
+      if (s3long.length)  { const c = s3long.filter(p => (Number(p.yards)||0) >= (Number(p.dist)||8)).length;  sitCards.push(card(pct(c,s3long.length),  "3rd &amp; Long (8+)",  s3long.length  + " plays")); }
+      if (sitCards.length) {
+        html += `<div style="margin-top:10px"><div style="display:grid;grid-template-columns:repeat(${Math.min(sitCards.length,2)},1fr);gap:8px">${sitCards.join("")}</div></div>`;
+      }
+    }
+
+    // Series / Drives
+    html += secHead("Series / Drives");
+    html += grid([
+      card(drives.length, "Total Drives"),
+      card(yavg(plays.length, drives.length), "Plays / Drive"),
+      card(yavg(totalDriveYards, drives.length), "Yards / Drive"),
+      card(threeAndOuts, "3-and-Outs"),
+      card(turnoverOnDowns, "TOD"),
+      card(punts.length, "Punts"),
+    ]);
+
+    // Explosive plays
+    if (exp10 > 0 || exp15 > 0 || exp20 > 0) {
+      html += secHead("Explosive Plays");
+      html += grid([
+        card(exp10, "10+ Yard Gains"),
+        card(exp15, "15+ Yard Gains"),
+        card(exp20, "20+ Yard Gains"),
+      ]);
+    }
+
+    // Negative plays
+    if (allNeg.length > 0) {
+      html += secHead("Negative Plays");
+      html += grid([
+        card(allNeg.length, "Neg. Plays"),
+        card(negYards + " yds", "Yards Lost"),
+        card(biggestLossPlay ? (Number(biggestLossPlay.yards) || 0) + " yds" : "—", "Biggest Loss", biggestLossPlay?.call ? esc2(biggestLossPlay.call) : ""),
+      ]);
+    }
+
+    // Run / pass split
+    if (runs.length && passes.length) {
+      const total  = runs.length + passes.length;
+      const runPct = Math.round(100 * runs.length / total);
+      const pasPct = 100 - runPct;
+      html += secHead("Run / Pass Split");
+      html += `<div style="margin-bottom:10px">
+        <div style="display:flex;height:30px;border-radius:8px;overflow:hidden;margin-bottom:8px">
+          <div style="flex:${runPct};background:var(--royal,#16317F);display:flex;align-items:center;justify-content:center">
+            <span style="font-family:var(--num);font-size:12px;color:#fff;font-weight:700">${runPct >= 12 ? runPct + "% RUN" : ""}</span>
+          </div>
+          <div style="flex:${pasPct};background:#2ECC71;display:flex;align-items:center;justify-content:center">
+            <span style="font-family:var(--num);font-size:12px;color:#fff;font-weight:700">${pasPct >= 12 ? pasPct + "% PASS" : ""}</span>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-around;font-size:12px;color:var(--slate)">
+          <span>${runs.length} car &middot; ${rushYards} yds &middot; ${yavg(rushYards, runs.length)} ypc</span>
+          <span>${passes.length} att &middot; ${passYards} yds &middot; ${yavg(passYards, passes.length)} ypa</span>
+        </div>
+      </div>`;
+    }
+
+    // By quarter
+    if (hasQtrs) {
+      const qtrRowsHtml = ["Q1","Q2","Q3","Q4"].map(q => {
+        const sub = plays.filter(p => p.qtr === q);
+        if (!sub.length) return "";
+        const yds = sub.reduce((s, p) => s + (Number(p.yards) || 0), 0);
+        const eff = sub.filter(p => p.success).length;
+        return `<tr>
+          <td><b>${q}</b></td>
+          <td style="font-family:var(--num);text-align:center">${sub.length}</td>
+          <td style="font-family:var(--num);text-align:center">${signYds(yds)}</td>
+          <td style="font-family:var(--num);text-align:center">${yavg(yds, sub.length)}</td>
+          <td style="font-family:var(--num);text-align:center">${pct(eff, sub.length)}</td>
+        </tr>`;
+      }).filter(Boolean).join("");
+      if (qtrRowsHtml) {
+        html += secHead("By Quarter");
+        html += `<div class="table-scroll"><table style="font-size:13px"><thead><tr>
+          <th style="text-align:left">Qtr</th><th>Plays</th><th>Yards</th><th>Avg</th><th>Eff %</th>
+          </tr></thead><tbody>${qtrRowsHtml}</tbody></table></div>`;
+      }
+    }
+
+    // By series (scrimmage mode)
+    if (hasSeries) {
+      const serNums = [...new Set(plays.map(p => p.series).filter(Boolean))].sort((a, b) => Number(a) - Number(b));
+      const serRowsHtml = serNums.slice(0, 16).map(s => {
+        const sub = plays.filter(p => p.series === s);
+        const yds = sub.reduce((sy, p) => sy + (Number(p.yards) || 0), 0);
+        const eff = sub.filter(p => p.success).length;
+        return `<tr>
+          <td><b>Series ${s}</b></td>
+          <td style="font-family:var(--num);text-align:center">${sub.length}</td>
+          <td style="font-family:var(--num);text-align:center">${signYds(yds)}</td>
+          <td style="font-family:var(--num);text-align:center">${yavg(yds, sub.length)}</td>
+          <td style="font-family:var(--num);text-align:center">${pct(eff, sub.length)}</td>
+        </tr>`;
+      }).join("");
+      if (serRowsHtml) {
+        html += secHead("By Series");
+        html += `<div class="table-scroll"><table style="font-size:13px"><thead><tr>
+          <th style="text-align:left">Series</th><th>Plays</th><th>Yards</th><th>Avg</th><th>Eff %</th>
+          </tr></thead><tbody>${serRowsHtml}</tbody></table></div>`;
+      }
+    }
+
+    return html + "</div>";
+  }
+
   // ---- autocomplete dropdowns ----
   const AC_IDS = ["formDrop","callDrop","motionDrop","frontDrop","coverageDrop"];
   function closeAllAC() {
@@ -1059,6 +1325,10 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       html = buildPlayersReport(plays, teamSettings);
     }
 
+    if (tab === "stats") {
+      html = buildGameStats();
+    }
+
     body.innerHTML = html || '<div class="report-empty">No data for this view.</div>';
   }
 
@@ -1504,6 +1774,7 @@ function buildHTML(game, mode) {
         <button class="rtab" data-tab="down">By Down</button>
         <button class="rtab" data-tab="hash">By Hash</button>
         <button class="rtab" data-tab="players">Players</button>
+        <button class="rtab" data-tab="stats">Game Stats</button>
       </div>
       <div class="report-body" id="reportBody"></div>
     </div>
