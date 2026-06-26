@@ -5,8 +5,40 @@ import {
   getMembers, getTeamInvites,
   inviteCoach, cancelInvite,
   updateMemberRole, removeMember,
+  getPlays, getSeasons, archiveSeason,
 } from "../db.js";
 import { renderGame } from "./game.js";
+
+// ── Hudl CSV roster import helper ────────────────────────────────────────────
+
+function importHudlRosterCSV(text, existingRoster) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return 0;
+  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, "").toLowerCase());
+  let iFirst = -1, iLast = -1, iName = -1, iJersey = -1, iPos = -1;
+  headers.forEach((h, i) => {
+    if (h === "first name" || h === "firstname") iFirst = i;
+    else if (h === "last name" || h === "lastname") iLast = i;
+    else if (h === "name" || h === "player" || h === "full name") iName = i;
+    if (h === "number" || h === "jersey" || h === "jersey number" || h === "#" || h === "no.") iJersey = i;
+    if (h === "position" || h === "pos") iPos = i;
+  });
+  let added = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const cells = lines[i].split(",").map(c => c.trim().replace(/^"|"$/g, ""));
+    let name = iName >= 0 ? (cells[iName] || "") : ((cells[iFirst] || "") + " " + (cells[iLast] || "")).trim();
+    const jersey = iJersey >= 0 ? (cells[iJersey] || "") : "";
+    let pos = (iPos >= 0 ? (cells[iPos] || "") : "").toUpperCase();
+    if (!name) continue;
+    const known = ["QB","RB","WR","TE","OL","K"];
+    if (!known.includes(pos)) pos = "Other";
+    const dup = existingRoster.some(p => p.name.toLowerCase() === name.toLowerCase() && p.jersey === jersey);
+    if (dup) continue;
+    existingRoster.push({ id: "p_" + Date.now() + "_" + Math.random().toString(36).slice(2), name, jersey, pos });
+    added++;
+  }
+  return added;
+}
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -50,6 +82,7 @@ export async function renderDashboard(container, user, teamId, userRole, onRefre
           ${isAdmin
             ? `<button id="settingsBtn" class="btn-ghost">&#9881; Settings</button>`
             : ""}
+          <button id="seasonReviewBtn" class="btn-ghost">&#9776; Season Review</button>
           <button id="logoutBtn" class="btn-ghost">Sign out</button>
         </div>
       </header>
@@ -69,6 +102,11 @@ export async function renderDashboard(container, user, teamId, userRole, onRefre
   `;
 
   document.getElementById("logoutBtn").addEventListener("click", () => logoutCoach());
+
+  document.getElementById("seasonReviewBtn").addEventListener("click", () =>
+    renderSeasonReview(container, user, teamId, userRole,
+      () => renderDashboard(container, user, teamId, userRole, onRefresh))
+  );
 
   if (canChart) {
     document.getElementById("newGameBtn").addEventListener("click", () =>
@@ -149,7 +187,12 @@ async function loadGame(container, user, teamId, game, userRole, onRefresh) {
   let teamSettings = {};
   try {
     const t = await getTeam(teamId);
-    teamSettings = t?.settings || {};
+    // Merge top-level player-tracking fields + nested settings
+    teamSettings = {
+      ...(t?.settings || {}),
+      trackPlayers: t?.trackPlayers || false,
+      roster: t?.roster || [],
+    };
   } catch (_) {}
   renderGame(container, user, teamId, game, userRole, teamSettings, () =>
     renderDashboard(container, user, teamId, userRole, onRefresh)
@@ -217,6 +260,11 @@ function showNewGameModal(container, user, teamId, userRole, onRefresh) {
 
 async function showSettingsModal(container, teamId, user, onRefresh) {
   const team = await getTeam(teamId);
+  const teamSettings = {
+    ...(team?.settings || {}),
+    trackPlayers: team?.trackPlayers || false,
+    roster: team?.roster || [],
+  };
 
   const overlay = document.createElement("div");
   overlay.className = "modal-back";
@@ -285,6 +333,41 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
         </div>
         <div id="inviteMsg" style="font-size:12px;margin-top:6px;display:none"></div>
         <div id="invitesList" style="margin-top:10px"></div>
+      </div>
+
+      <div class="settings-section" style="border-bottom:none;padding-bottom:0;margin-top:4px">
+        <hr style="margin:18px 0;border:none;border-top:1px solid var(--chalk)">
+        <h3 style="margin:0 0 12px;font-size:15px">Player tracking</h3>
+        <label class="toggle-row" style="margin-bottom:10px;display:flex;align-items:center;gap:10px;cursor:pointer">
+          <span>Track passer / receiver / rusher</span>
+          <input type="checkbox" id="stgTrackPlayers" ${teamSettings.trackPlayers ? "checked" : ""}>
+        </label>
+        <div id="rosterSection" style="${teamSettings.trackPlayers ? "" : "display:none"}">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span style="font-size:13px;color:var(--slate)">Roster</span>
+            <button id="importRosterBtn" class="btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--royal);border:1px solid var(--chalk);background:#fff;border-radius:6px">Import Hudl CSV</button>
+            <input id="rosterCsvInput" type="file" accept=".csv" style="display:none">
+          </div>
+          <div id="rosterList" style="margin-bottom:10px;max-height:200px;overflow-y:auto"></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <input id="rosterName" type="text" class="field" placeholder="Player name" style="flex:1;min-width:120px;padding:8px 10px;border:1.5px solid var(--chalk);border-radius:8px;font-size:14px;font-family:var(--body)">
+            <input id="rosterJersey" type="text" class="field" placeholder="#" style="width:60px;padding:8px 10px;border:1.5px solid var(--chalk);border-radius:8px;font-size:14px;font-family:var(--body)">
+            <select id="rosterPos" class="field role-sel" style="width:80px">
+              <option value="QB">QB</option>
+              <option value="RB">RB</option>
+              <option value="WR">WR</option>
+              <option value="TE">TE</option>
+              <option value="OL">OL</option>
+              <option value="K">K</option>
+              <option value="Other">Other</option>
+            </select>
+            <button id="addRosterPlayerBtn" class="btn-primary" style="flex:none">Add</button>
+          </div>
+        </div>
+        <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
+          <button class="btn-secondary" id="savePlayerTrackingBtn">Save Player Tracking</button>
+          <span id="playerTrackingMsg" style="font-size:12px;display:none"></span>
+        </div>
       </div>
 
       <button class="modal-cancel" id="settingsClose" style="margin-top:16px">Close</button>
@@ -386,6 +469,83 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
   });
 
   await refreshMembersList(overlay, teamId, user);
+
+  // ---- Player tracking roster wiring ----
+  let localRoster = (teamSettings.roster || []).slice();
+
+  function renderRosterListDash() {
+    const listEl = overlay.querySelector("#rosterList");
+    if (!listEl) return;
+    if (!localRoster.length) {
+      listEl.innerHTML = '<div style="font-size:13px;color:var(--slate);padding:6px 0">No players yet.</div>';
+      return;
+    }
+    listEl.innerHTML = localRoster.map(p => `
+      <div class="roster-player">
+        <span class="roster-jersey">#${esc(p.jersey)}</span>
+        <span class="roster-name">${esc(p.name)}</span>
+        <span class="roster-pos">${esc(p.pos)}</span>
+        <button class="modal-cancel" style="margin:0;font-size:18px;line-height:1;padding:0 6px" data-del-player="${esc(p.id)}">&times;</button>
+      </div>`).join("");
+  }
+  renderRosterListDash();
+
+  overlay.querySelector("#stgTrackPlayers").addEventListener("change", function() {
+    overlay.querySelector("#rosterSection").style.display = this.checked ? "" : "none";
+  });
+
+  overlay.querySelector("#addRosterPlayerBtn").addEventListener("click", () => {
+    const name = overlay.querySelector("#rosterName").value.trim();
+    const jersey = overlay.querySelector("#rosterJersey").value.trim();
+    const pos = overlay.querySelector("#rosterPos").value;
+    if (!name) { alert("Enter a player name."); return; }
+    localRoster.push({ id: "p_" + Date.now() + "_" + Math.random().toString(36).slice(2), name, jersey, pos });
+    overlay.querySelector("#rosterName").value = "";
+    overlay.querySelector("#rosterJersey").value = "";
+    renderRosterListDash();
+  });
+
+  overlay.querySelector("#rosterList").addEventListener("click", e => {
+    const btn = e.target.closest("[data-del-player]");
+    if (!btn) return;
+    const id = btn.getAttribute("data-del-player");
+    localRoster = localRoster.filter(p => p.id !== id);
+    renderRosterListDash();
+  });
+
+  overlay.querySelector("#importRosterBtn").addEventListener("click", () =>
+    overlay.querySelector("#rosterCsvInput").click()
+  );
+  overlay.querySelector("#rosterCsvInput").addEventListener("change", function() {
+    const file = this.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const added = importHudlRosterCSV(e.target.result, localRoster);
+      renderRosterListDash();
+      alert(`Imported ${added} player${added === 1 ? "" : "s"} from CSV.`);
+    };
+    reader.readAsText(file);
+    this.value = "";
+  });
+
+  overlay.querySelector("#savePlayerTrackingBtn").addEventListener("click", async () => {
+    const msgEl = overlay.querySelector("#playerTrackingMsg");
+    try {
+      await updateTeam(teamId, {
+        trackPlayers: overlay.querySelector("#stgTrackPlayers").checked,
+        roster: localRoster,
+      });
+      msgEl.style.color = "#15803d";
+      msgEl.textContent = "Saved.";
+      msgEl.style.display = "inline";
+      setTimeout(() => { msgEl.style.display = "none"; }, 2000);
+    } catch (err) {
+      msgEl.style.color = "#DC2626";
+      msgEl.textContent = "Error: " + err.message;
+      msgEl.style.display = "inline";
+    }
+  });
 }
 
 async function refreshMembersList(overlay, teamId, user) {
@@ -483,4 +643,350 @@ function esc(s) {
   return String(s ?? "").replace(/[&<>"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]
   );
+}
+
+// ── Season Review ─────────────────────────────────────────────────────────────
+
+async function renderSeasonReview(container, user, teamId, userRole, onBack) {
+  const isAdmin = userRole === "admin";
+
+  container.innerHTML = `
+    <div class="sr-wrap">
+      <header class="board">
+        <div class="board-top">
+          <div style="display:flex;align-items:center;gap:12px">
+            <button id="srBack" class="back" aria-label="Back">&larr;</button>
+            <div>
+              <h1>Season Review</h1>
+              <div class="sub">All saved games &middot; aggregated statistics</div>
+            </div>
+          </div>
+          ${isAdmin
+            ? `<button id="srArchiveBtn" class="btn-ghost">Archive Season</button>`
+            : ""}
+        </div>
+      </header>
+
+      <div class="sr-body" id="srBody">
+        <div class="loading">Loading season data&hellip;</div>
+      </div>
+
+      <div class="modal-back" id="srArchiveModal" hidden>
+        <div class="modal">
+          <h2>Archive Season</h2>
+          <p>Name this season. All current games will be tagged with it and you can view them from the season selector.</p>
+          <div class="form-field">
+            <label>Season name</label>
+            <input id="srArchiveName" type="text" placeholder="e.g. 2025 Fall Season" maxlength="60">
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn-primary" id="srArchiveConfirm" style="flex:1">Archive &amp; Start New Season</button>
+            <button class="modal-cancel" id="srArchiveCancel" style="margin:0;flex:0 0 auto">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-back" id="srDrillModal" hidden>
+        <div class="modal modal-wide">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px">
+            <h2 id="srDrillTitle" style="margin:0;font-size:18px"></h2>
+            <button id="srDrillClose" class="modal-cancel" style="margin:0;flex:none;font-size:22px;line-height:1;padding:0 6px">&times;</button>
+          </div>
+          <div id="srDrillBody" class="drill-scroll"></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("srBack").addEventListener("click", onBack);
+
+  if (isAdmin) {
+    document.getElementById("srArchiveBtn").addEventListener("click", () => {
+      const yr = new Date().getFullYear();
+      document.getElementById("srArchiveName").value = yr + " Season";
+      document.getElementById("srArchiveModal").hidden = false;
+    });
+    document.getElementById("srArchiveConfirm").addEventListener("click", async () => {
+      const name = (document.getElementById("srArchiveName").value || "").trim();
+      if (!name) { alert("Please enter a season name."); return; }
+      const btn = document.getElementById("srArchiveConfirm");
+      btn.disabled = true; btn.textContent = "Archiving…";
+      try {
+        await archiveSeason(teamId, name);
+        document.getElementById("srArchiveModal").hidden = true;
+        renderSeasonReview(container, user, teamId, userRole, onBack);
+      } catch (err) {
+        alert("Could not archive: " + err.message);
+        btn.disabled = false; btn.textContent = "Archive & Start New Season";
+      }
+    });
+    document.getElementById("srArchiveCancel").addEventListener("click", () => {
+      document.getElementById("srArchiveModal").hidden = true;
+    });
+    document.getElementById("srArchiveModal").addEventListener("click", (e) => {
+      if (e.target === document.getElementById("srArchiveModal"))
+        document.getElementById("srArchiveModal").hidden = true;
+    });
+  }
+
+  document.getElementById("srDrillClose").addEventListener("click", () => {
+    document.getElementById("srDrillModal").hidden = true;
+  });
+  document.getElementById("srDrillModal").addEventListener("click", (e) => {
+    if (e.target === document.getElementById("srDrillModal"))
+      document.getElementById("srDrillModal").hidden = true;
+  });
+
+  // Load all games + their plays
+  let allGames, seasons;
+  try {
+    [allGames, seasons] = await Promise.all([getGames(teamId), getSeasons(teamId)]);
+    allGames = await Promise.all(allGames.map(async (g) => ({
+      ...g, plays: await getPlays(teamId, g.id),
+    })));
+  } catch (err) {
+    document.getElementById("srBody").innerHTML =
+      `<div class="loading" style="color:#DC2626">Error loading data: ${esc(err.message)}</div>`;
+    return;
+  }
+
+  // Season selector state
+  let viewingSeasonId = null; // null = current season
+
+  function getActiveGames() {
+    if (viewingSeasonId) return allGames.filter((g) => g.seasonId === viewingSeasonId);
+    return allGames.filter((g) => !g.seasonId);
+  }
+
+  function renderBody() {
+    const body = document.getElementById("srBody");
+    const activeGames = getActiveGames();
+    const all = activeGames.flatMap((g) => g.plays);
+
+    // Season tabs
+    let tabsHtml = "";
+    if (seasons.length) {
+      const currentActive = !viewingSeasonId;
+      tabsHtml = `<div class="sr-tabs">` +
+        `<button class="srtab${currentActive ? " srtab-active" : ""}" data-stab="current">Current Season</button>` +
+        seasons.map((s) => {
+          const active = viewingSeasonId === s.id;
+          return `<button class="srtab${active ? " srtab-active" : ""}" data-stab="${esc(s.id)}">${esc(s.name)}</button>`;
+        }).join("") +
+        `</div>`;
+    }
+
+    if (!activeGames.length) {
+      body.innerHTML = tabsHtml + `<div class="loading">No games in this season yet.</div>`;
+      rewireTabs();
+      return;
+    }
+
+    const n = all.length;
+    const eff = all.filter((p) => p.success).length;
+    const rate = n ? Math.round(100 * eff / n) : 0;
+    const runs = all.filter((p) => p.type === "run").length;
+    const passes = n - runs;
+
+    const statsHtml = `<div class="sr-cards">
+      <div class="stat"><div class="v">${activeGames.length}</div><div class="k">Games</div></div>
+      <div class="stat"><div class="v">${n}</div><div class="k">Plays</div></div>
+      <div class="stat good"><div class="v">${rate}%</div><div class="k">Effective</div></div>
+      <div class="stat"><div class="v">${n ? Math.round(100*runs/n) + "/" + Math.round(100*passes/n) : "—"}</div><div class="k">Run / Pass</div></div>
+    </div>`;
+
+    const topHtml = `<h3 class="sr-section-head">Top plays this season <span class="sr-section-sub">run 2+ times · ranked by success rate · tap a row to see every instance</span></h3>` +
+      srCallsTable(all, false);
+    const leastHtml = `<h3 class="sr-section-head">Least effective plays this season <span class="sr-section-sub">run 2+ times · lowest success rate first</span></h3>` +
+      srCallsTable(all, true);
+
+    const gamesHtml = `<h3 class="sr-section-head">Games</h3>` +
+      activeGames.map((g) => {
+        const np = g.plays.length;
+        const ep = g.plays.filter((p) => p.success).length;
+        const rp = np ? Math.round(100 * ep / np) : 0;
+        const avgp = np ? (g.plays.reduce((a, p) => a + (Number(p.yards) || 0), 0) / np).toFixed(1) : "0.0";
+        const gameName = g.opponent ? "vs " + esc(g.opponent) : "Untitled game";
+        return `<div class="sr-game-card">
+          <div class="sr-game-top">
+            <div>
+              <div class="sr-game-name">${gameName}</div>
+              <div class="sr-game-meta">${esc(g.date || "")}${g.date && g.mode ? " · " : ""}${esc(g.mode || "")}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span style="font-family:var(--num);font-size:14px">${np} plays · <span style="color:#15803d">${rp}%</span> eff · ${avgp >= 0 ? "+" : ""}${avgp} yds/play</span>
+              <button class="btn-secondary sr-view-btn" data-view-game="${esc(g.id)}">View</button>
+            </div>
+          </div>
+          <div id="sr-gd-${esc(g.id)}" style="display:none;margin-top:12px">
+            ${srPlayTable(g.plays)}
+          </div>
+        </div>`;
+      }).join("");
+
+    body.innerHTML = tabsHtml + `<div class="sr-content">` + statsHtml + topHtml + leastHtml + gamesHtml + `</div>`;
+    rewireTabs();
+
+    // Wire game expand buttons
+    body.querySelectorAll(".sr-view-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-view-game");
+        const detail = document.getElementById("sr-gd-" + id);
+        if (!detail) return;
+        const isOpen = detail.style.display !== "none";
+        detail.style.display = isOpen ? "none" : "";
+        btn.textContent = isOpen ? "View" : "Hide";
+      });
+    });
+
+    // Wire drill-down
+    body.addEventListener("click", (e) => {
+      const row = e.target.closest("[data-drill]");
+      if (!row) return;
+      const callName = row.getAttribute("data-drill");
+      document.getElementById("srDrillTitle").textContent = callName;
+      document.getElementById("srDrillBody").innerHTML = srBuildDrillDown(callName, activeGames);
+      document.getElementById("srDrillModal").hidden = false;
+    });
+  }
+
+  function rewireTabs() {
+    document.querySelectorAll(".srtab").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const tid = btn.getAttribute("data-stab");
+        viewingSeasonId = tid === "current" ? null : tid;
+        renderBody();
+      });
+    });
+  }
+
+  renderBody();
+}
+
+// ── Season Review helpers ─────────────────────────────────────────────────────
+
+function srGroupCalls(list) {
+  const map = {};
+  list.forEach((p) => {
+    const name = (p.call || "").trim() || "(unnamed)";
+    const key = name.toLowerCase();
+    if (!map[key]) map[key] = { name, count: 0, eff: 0, yds: 0 };
+    map[key].count++; map[key].yds += Number(p.yards) || 0;
+    if (p.success) map[key].eff++;
+  });
+  const arr = Object.values(map).map((g) => {
+    g.rate = g.count ? g.eff / g.count : 0;
+    g.avg  = g.count ? g.yds / g.count  : 0;
+    return g;
+  });
+  arr.sort((a, b) => b.rate !== a.rate ? b.rate - a.rate : b.avg - a.avg);
+  return arr;
+}
+
+function srCallsTable(list, least) {
+  const all = srGroupCalls(list).filter((g) => g.count >= 2);
+  const calls = least ? all.slice(-10).reverse() : all.slice(0, 10);
+  if (!calls.length) return `<div class="loading" style="padding:16px 0">Not enough data yet (need plays run 2+ times).</div>`;
+  const rows = calls.map((g, i) => {
+    const rate = Math.round(100 * g.rate);
+    const sign = g.avg > 0 ? "+" : "";
+    const badClass = least ? " rank-bad" : "";
+    const barClass = least ? " bad" : "";
+    return `<tr data-drill="${esc(g.name)}">
+      <td><span class="sr-rank${badClass}">${i + 1}</span></td>
+      <td><b>${esc(g.name)}</b></td>
+      <td><b style="font-family:var(--num)">${g.count}</b></td>
+      <td><b style="font-family:var(--num)">${g.eff}/${g.count}</b></td>
+      <td>
+        <div class="sr-ratecell">
+          <div class="sr-bar${barClass}"><i style="width:${rate}%"></i></div>
+          <b>${rate}%</b>
+        </div>
+      </td>
+      <td><span class="res ${g.avg > 0 ? "up" : g.avg < 0 ? "down" : "flat"}">${sign}${g.avg.toFixed(1)}</span></td>
+    </tr>`;
+  }).join("");
+  return `<div class="table-scroll" style="margin-bottom:20px"><table><thead><tr>
+    <th>Rank</th><th>Play call</th><th>Times</th><th>Effective</th><th>Success rate</th><th>Avg yds</th>
+  </tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function srPlayTable(plays) {
+  if (!plays.length) return `<div class="loading" style="padding:8px 0">No plays.</div>`;
+  const rows = plays.map((p, i) => {
+    const dir = p.yards > 0 ? "up" : p.yards < 0 ? "down" : "flat";
+    const sign = p.yards > 0 ? "+" : "";
+    const qtr = p.mode === "scrimmage" ? esc(p.series || "") : esc(p.qtr || "");
+    return `<tr>
+      <td><b style="font-family:var(--num)">${i + 1}</b></td>
+      <td>${qtr}</td>
+      <td><b style="font-family:var(--num)">${srDnDist(p)}</b></td>
+      <td>${p.yl != null && p.yl !== "" ? esc(String(p.yl)) : "&ndash;"}<span style="color:var(--slate);font-size:11px"> ${esc(p.hash || "")}</span></td>
+      <td><span class="pill ${esc(p.type || "run")}">${p.type === "run" ? "RUN" : p.type === "punt" ? "PUNT" : "PASS"}</span></td>
+      <td>${esc(p.form || "—")}</td>
+      <td>${esc(p.call || "—")}</td>
+      <td><span class="res ${dir}">${sign}${p.yards}</span></td>
+      <td><span class="succ ${p.success ? "y" : "n"} static">${p.success ? "✓" : "✗"}</span></td>
+    </tr>`;
+  }).join("");
+  return `<div class="table-scroll"><table><thead><tr>
+    <th>#</th><th>Qtr/Ser</th><th>Dn &amp; Dist</th><th>Ball</th><th>Type</th><th>Formation</th><th>Play call</th><th>Yds</th><th>Eff</th>
+  </tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function srDnDist(p) {
+  if (p.mode === "scrimmage") return p.playNum ? "Play " + String(p.playNum) : "—";
+  const ds = (p.dist === "" || p.dist == null) ? "" : String(p.dist);
+  return ds ? String(p.down) + " & " + ds : String(p.down || "");
+}
+
+function srBuildDrillDown(callName, gamesData) {
+  const nameKey = callName.toLowerCase();
+  const groups = [];
+  gamesData.forEach((g) => {
+    const matching = (g.plays || []).filter((p) => (p.call || "").trim().toLowerCase() === nameKey);
+    if (matching.length) {
+      const gname = g.opponent ? "vs " + g.opponent : "Untitled game";
+      groups.push({ name: gname, date: g.date || "", plays: matching });
+    }
+  });
+  if (!groups.length) return `<div class="report-empty">No matching plays found.</div>`;
+  const total = groups.reduce((a, g) => a + g.plays.length, 0);
+  const effCount = groups.reduce((a, g) => a + g.plays.filter((p) => p.success).length, 0);
+  const totalYds = groups.reduce((a, g) => a + g.plays.reduce((b, p) => b + (Number(p.yards) || 0), 0), 0);
+  const rate = Math.round(100 * effCount / total);
+  const avgYds = (totalYds / total).toFixed(1);
+  const statsHtml = `<div class="drill-stats">
+    <span><b>${total}</b>times run</span>
+    <span><b>${effCount}/${total}</b>effective</span>
+    <span><b>${rate}%</b>success rate</span>
+    <span><b>${totalYds >= 0 ? "+" : ""}${avgYds}</b>avg yards</span>
+  </div>`;
+  const groupsHtml = groups.map((g) => {
+    const rows = g.plays.map((p, i) => {
+      const dir = p.yards > 0 ? "up" : p.yards < 0 ? "down" : "flat";
+      const sign = p.yards > 0 ? "+" : "";
+      const ctx = p.mode === "scrimmage" ? `Ser ${esc(p.series || "")}` : `Q${esc(p.qtr || "")}`;
+      const tags = (p.tags || []).length
+        ? `<span style="font-size:11px;color:var(--slate)">${p.tags.map(esc).join(", ")}</span>`
+        : "";
+      return `<tr>
+        <td><b style="font-family:var(--num)">${i + 1}</b></td>
+        <td>${ctx}</td>
+        <td><b style="font-family:var(--num)">${srDnDist(p)}</b></td>
+        <td>${p.yl != null && p.yl !== "" ? esc(String(p.yl)) : "&ndash;"}<span style="color:var(--slate);font-size:11px"> ${esc(p.hash || "")}</span></td>
+        <td>${esc(p.form || "—")}</td>
+        <td>${tags}</td>
+        <td><span class="res ${dir}">${sign}${p.yards}</span></td>
+        <td><span class="succ ${p.success ? "y" : "n"} static">${p.success ? "✓" : "✗"}</span></td>
+      </tr>`;
+    }).join("");
+    return `<div class="drill-game-group">
+      <div class="drill-game-head">${esc(g.name)}${g.date ? ` <span style="font-weight:400;color:var(--slate)">· ${esc(g.date)}</span>` : ""}</div>
+      <div class="table-scroll"><table><thead><tr>
+        <th>#</th><th>Qtr/Ser</th><th>Dn &amp; Dist</th><th>Ball On</th><th>Formation</th><th>Tags</th><th>Yds</th><th>Eff</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>
+    </div>`;
+  }).join("");
+  return statsHtml + groupsHtml;
 }

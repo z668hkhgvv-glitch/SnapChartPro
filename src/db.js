@@ -36,6 +36,7 @@ import {
   query,
   orderBy,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase.js";
 
@@ -208,4 +209,33 @@ export function subscribePlays(teamId, gameId, cb) {
   return onSnapshot(q, (snap) => {
     cb(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   });
+}
+
+export async function getPlays(teamId, gameId) {
+  const snap = await getDocs(
+    query(collection(db, "teams", teamId, "games", gameId, "plays"), orderBy("createdAt", "asc"))
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+export async function getSeasons(teamId) {
+  const snap = await getDocs(
+    query(collection(db, "teams", teamId, "seasons"), orderBy("archivedAt", "desc"))
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+export async function archiveSeason(teamId, name) {
+  const sRef = doc(collection(db, "teams", teamId, "seasons"));
+  const seasonId = sRef.id;
+  await setDoc(sRef, { name, archivedAt: serverTimestamp() });
+  const gamesSnap = await getDocs(collection(db, "teams", teamId, "games"));
+  const batch = writeBatch(db);
+  gamesSnap.docs.forEach((gDoc) => {
+    if (!gDoc.data().seasonId) {
+      batch.update(gDoc.ref, { seasonId });
+    }
+  });
+  await batch.commit();
+  return seasonId;
 }

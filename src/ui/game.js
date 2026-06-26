@@ -104,6 +104,48 @@ function advanceBallOn(ylStr, yards) {
   return { yl: String(Math.round(newYl) || 50), sign: newSign };
 }
 
+// ---------- file export helpers -----------------------------------------------
+
+function downloadFile(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement("a"), { href: url, download: filename });
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function csvRow(vals) {
+  return vals.map((v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`).join(",");
+}
+
+function exportCSV(plays, game, teamSettings) {
+  const rosterMap = {};
+  ((teamSettings && teamSettings.roster) || []).forEach(p => rosterMap[p.id] = `#${p.jersey} ${p.name}`);
+  const head = csvRow(["#","Qtr","Down","Dist","Ball On","Hash","Type","Formation","Play Call","Motion","Front","Coverage","Yards","Effective","Tags","Note","Passer","Receiver","Rusher"]);
+  const rows = plays.map((p, i) => csvRow([
+    i + 1, p.qtr, p.down, p.dist, p.yl, p.hash, p.type,
+    p.form, p.call, p.motion, p.front, p.coverage, p.yards,
+    p.success ? "Y" : "N", (p.tags || []).join("|"), p.note || "",
+    rosterMap[p.passer] || "", rosterMap[p.receiver] || "", rosterMap[p.rusher] || "",
+  ]));
+  const title = (game.opponent ? "vs_" + game.opponent : "Game").replace(/\s+/g, "_");
+  downloadFile(`${title}_${game.date || "chart"}.csv`, [head, ...rows].join("\n"), "text/csv");
+}
+
+function exportHudl(plays, game, teamSettings) {
+  const rosterMap = {};
+  ((teamSettings && teamSettings.roster) || []).forEach(p => rosterMap[p.id] = `#${p.jersey} ${p.name}`);
+  const head = csvRow(["Play #","Down","Distance","Yardline","Hash","Play Type","Formation","Play Call","Motion","Defensive Front","Coverage","Yards Gained","Effective","Tags","Notes","Passer","Receiver","Rusher"]);
+  const rows = plays.map((p, i) => csvRow([
+    i + 1, p.down || "", p.dist || "", p.yl || "", p.hash, p.type,
+    p.form || "", p.call || "", p.motion || "", p.front || "", p.coverage || "",
+    p.yards, p.success ? "Y" : "N", (p.tags || []).join("|"), p.note || "",
+    rosterMap[p.passer] || "", rosterMap[p.receiver] || "", rosterMap[p.rusher] || "",
+  ]));
+  const title = (game.opponent ? "vs_" + game.opponent : "Game").replace(/\s+/g, "_");
+  downloadFile(`${title}_${game.date || "chart"}_hudl.csv`, [head, ...rows].join("\n"), "text/csv");
+}
+
 // ---------- public entry point -----------------------------------------------
 
 export function renderGame(container, user, teamId, game, userRole, teamSettings, onBack) {
@@ -112,6 +154,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   let editingId = null;
   let unsub = null;
   let penaltyPendingPlay = null;
+  let lastPasser = '', lastReceiver = '', lastRusher = '';
 
   // Role gates
   const canChart  = userRole !== "readonly";   // add & edit plays
@@ -180,7 +223,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   }
   wireSeg("qtr",   "qtr");
   wireSeg("hash",  "hash");
-  wireSeg("ptype", "type");
+  wireSeg("ptype", "type", () => { updatePlayerFieldVisibility(draft.type); });
   wireSeg("down",  "down", () => { refreshAutoEff(); update7v7Hint(); });
 
   // ---- effective checkbox ----
@@ -344,6 +387,8 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
 
   // Apply mode visibility once on initial render
   applyModeVisibility();
+  populatePlayerDropdowns();
+  updatePlayerFieldVisibility(draft.type);
   if (is7) {
     document.getElementById("yl").value = 40;
     update7v7Hint();
@@ -367,6 +412,146 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     const ylHintEl    = document.getElementById("ylHint");
     if (ylSignBtnEl) ylSignBtnEl.style.display = is7 ? "none" : "";
     if (ylHintEl)    ylHintEl.style.display    = is7 ? "none" : "";
+  }
+
+  // ---- player tracking helpers ----
+  function populatePlayerDropdowns() {
+    const roster = (teamSettings.roster || []);
+    const passerPrefs   = ["QB","Other"];
+    const receiverPrefs = ["WR","TE","RB","Other"];
+    const rusherPrefs   = ["RB","QB","WR","Other"];
+    [[document.getElementById("fPasser"), passerPrefs],
+     [document.getElementById("fReceiver"), receiverPrefs],
+     [document.getElementById("fRusher"), rusherPrefs]].forEach(([el, prefs]) => {
+      if (!el) return;
+      const sorted = [...roster].sort((a, b) => {
+        const ai = prefs.indexOf(a.pos) === -1 ? 99 : prefs.indexOf(a.pos);
+        const bi = prefs.indexOf(b.pos) === -1 ? 99 : prefs.indexOf(b.pos);
+        return ai !== bi ? ai - bi : (Number(a.jersey)||0) - (Number(b.jersey)||0);
+      });
+      const prev = el.value;
+      el.innerHTML = '<option value="">— select —</option>' +
+        sorted.map(p => `<option value="${esc(p.id)}">#${esc(p.jersey)} ${esc(p.name)} (${esc(p.pos)})</option>`).join("");
+      el.value = prev;
+    });
+  }
+
+  function updatePlayerFieldVisibility(typeVal) {
+    const track = teamSettings.trackPlayers && (teamSettings.roster || []).length > 0;
+    const showPass = track && typeVal === "pass";
+    const showRun  = track && typeVal === "run";
+    const pr = document.getElementById("passerRow");
+    const rc = document.getElementById("receiverRow");
+    const ru = document.getElementById("rusherRow");
+    if (pr) pr.style.display = showPass ? "" : "none";
+    if (rc) rc.style.display = showPass ? "" : "none";
+    if (ru) ru.style.display = showRun  ? "" : "none";
+  }
+
+  function buildPlayersReport(plays, teamSettings) {
+    if (!teamSettings.trackPlayers || !(teamSettings.roster || []).length) {
+      return '<div class="report-empty">Enable "Track players" in Settings and add a roster to see player stats.</div>';
+    }
+    const rosterMap = {};
+    (teamSettings.roster || []).forEach(p => rosterMap[p.id] = p);
+
+    const passerStats = {}, receiverStats = {}, rusherStats = {};
+    plays.forEach(p => {
+      if (p.passer && rosterMap[p.passer]) {
+        if (!passerStats[p.passer]) passerStats[p.passer] = {id: p.passer, att: 0, yds: 0, eff: 0};
+        passerStats[p.passer].att++;
+        passerStats[p.passer].yds += Number(p.yards) || 0;
+        if (p.success) passerStats[p.passer].eff++;
+      }
+      if (p.receiver && rosterMap[p.receiver]) {
+        if (!receiverStats[p.receiver]) receiverStats[p.receiver] = {id: p.receiver, tgts: 0, yds: 0, eff: 0};
+        receiverStats[p.receiver].tgts++;
+        receiverStats[p.receiver].yds += Number(p.yards) || 0;
+        if (p.success) receiverStats[p.receiver].eff++;
+      }
+      if (p.rusher && rosterMap[p.rusher]) {
+        if (!rusherStats[p.rusher]) rusherStats[p.rusher] = {id: p.rusher, car: 0, yds: 0, eff: 0};
+        rusherStats[p.rusher].car++;
+        rusherStats[p.rusher].yds += Number(p.yards) || 0;
+        if (p.success) rusherStats[p.rusher].eff++;
+      }
+    });
+
+    function playerRow(stat, countKey, countLabel) {
+      const pl = rosterMap[stat.id];
+      const n = stat[countKey] || 1;
+      const rate = Math.round(100 * stat.eff / n);
+      const avg = (stat.yds / n).toFixed(1);
+      return `<div class="rpt-row">
+        <div class="rpt-label"><b>#${esc(pl.jersey)}</b> ${esc(pl.name)} <span style="font-size:11px;color:var(--slate)">${esc(pl.pos)}</span></div>
+        <div class="rpt-stats">
+          <span class="rpt-n">${n} ${countLabel}</span>
+          <span class="rpt-avg">${avg} yds</span>
+          <span class="rpt-eff" style="color:${rate>=50?"#15803d":"#b91c1c"}">${rate}% eff</span>
+        </div>
+        <div class="rpt-bar-wrap"><div class="rpt-bar" style="width:${rate}%"></div></div>
+      </div>`;
+    }
+
+    let html = "";
+    const passers = Object.values(passerStats).sort((a,b) => (b.eff/b.att)-(a.eff/a.att));
+    if (passers.length) {
+      html += '<div class="report-section-head">Passers</div>';
+      html += passers.map(s => playerRow(s, "att", "att")).join("");
+    }
+    const receivers = Object.values(receiverStats).sort((a,b) => (b.eff/b.tgts)-(a.eff/a.tgts));
+    if (receivers.length) {
+      html += '<div class="report-section-head">Receivers</div>';
+      html += receivers.map(s => playerRow(s, "tgts", "tgts")).join("");
+    }
+    const rushers = Object.values(rusherStats).sort((a,b) => (b.eff/b.car)-(a.eff/a.car));
+    if (rushers.length) {
+      html += '<div class="report-section-head">Rushers</div>';
+      html += rushers.map(s => playerRow(s, "car", "carries")).join("");
+    }
+
+    // By play call
+    const callPlayer = {};
+    plays.forEach(p => {
+      const callKey = (p.call || "").trim();
+      if (!callKey) return;
+      const pid = p.passer || p.rusher || p.receiver;
+      if (!pid || !rosterMap[pid]) return;
+      const k = callKey + "|||" + pid;
+      if (!callPlayer[k]) callPlayer[k] = {call: callKey, id: pid, n: 0, yds: 0, eff: 0};
+      callPlayer[k].n++;
+      callPlayer[k].yds += Number(p.yards) || 0;
+      if (p.success) callPlayer[k].eff++;
+    });
+    const byCal = {};
+    Object.values(callPlayer).forEach(item => {
+      if (!byCal[item.call]) byCal[item.call] = [];
+      byCal[item.call].push(item);
+    });
+    const callKeys = Object.keys(byCal).filter(k => byCal[k].reduce((a,b)=>a+b.n,0) >= 2);
+    if (callKeys.length) {
+      html += '<div class="report-section-head">By play call</div>';
+      callKeys.sort().forEach(callKey => {
+        const items = byCal[callKey].sort((a,b)=>(b.eff/b.n)-(a.eff/a.n));
+        html += `<div class="rpt-group-label">${esc(callKey)}</div>` +
+          items.map(s => {
+            const pl = rosterMap[s.id];
+            const rate = Math.round(100*s.eff/s.n);
+            const avg = (s.yds/s.n).toFixed(1);
+            return `<div class="rpt-row" style="padding-left:14px">
+              <div class="rpt-label"><b>#${esc(pl.jersey)}</b> ${esc(pl.name)} <span style="font-size:11px;color:var(--slate)">${esc(pl.pos)}</span></div>
+              <div class="rpt-stats">
+                <span class="rpt-n">${s.n} plays</span>
+                <span class="rpt-avg">${avg} yds</span>
+                <span class="rpt-eff" style="color:${rate>=50?"#15803d":"#b91c1c"}">${rate}% eff</span>
+              </div>
+              <div class="rpt-bar-wrap"><div class="rpt-bar" style="width:${rate}%"></div></div>
+            </div>`;
+          }).join("");
+      });
+    }
+
+    return html || '<div class="report-empty">No player data logged yet this game.</div>';
   }
 
   // ---- autocomplete dropdowns ----
@@ -464,6 +649,10 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     draft.yardSign = 1;
     paintYardSign();
     draft.note = "";
+    paintNote();
+    if (document.getElementById("fPasser"))   document.getElementById("fPasser").value   = lastPasser;
+    if (document.getElementById("fReceiver")) document.getElementById("fReceiver").value = lastReceiver;
+    if (document.getElementById("fRusher"))   document.getElementById("fRusher").value   = lastRusher;
     document.getElementById("effHint").textContent = "Auto-checked when the play gains enough";
     refreshAutoEff();
     refreshAutoFirstDown();
@@ -497,7 +686,13 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       success:  draft.effective,
       auto:     !draft.effTouched,
       note:     draft.note,
+      passer:   teamSettings.trackPlayers ? (document.getElementById("fPasser")?.value  || "") : "",
+      receiver: teamSettings.trackPlayers ? (document.getElementById("fReceiver")?.value || "") : "",
+      rusher:   teamSettings.trackPlayers ? (document.getElementById("fRusher")?.value  || "") : "",
     };
+    if (playData.passer)   lastPasser   = playData.passer;
+    if (playData.receiver) lastReceiver = playData.receiver;
+    if (playData.rusher)   lastRusher   = playData.rusher;
     if (isScrim) {
       playData.playNum = (plays.length % sp) + 1;
       playData.series  = Math.floor(plays.length / sp) + 1;
@@ -595,6 +790,11 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     draft.effTouched = true; paintEff();
     draft.fdTouched  = true;
     draft.note = p.note || "";
+    paintNote();
+    updatePlayerFieldVisibility(p.type);
+    if (document.getElementById("fPasser"))   document.getElementById("fPasser").value   = p.passer   || "";
+    if (document.getElementById("fReceiver")) document.getElementById("fReceiver").value = p.receiver || "";
+    if (document.getElementById("fRusher"))   document.getElementById("fRusher").value   = p.rusher   || "";
     document.getElementById("addBtn").textContent = "Save changes";
     document.getElementById("cancelEdit").hidden = false;
     document.querySelector(".entry").classList.add("editing");
@@ -706,6 +906,203 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
 
+  // ---- note modal ----
+  function paintNote() {
+    const btn = document.getElementById("noteBtn");
+    const lbl = document.getElementById("noteBtnLabel");
+    if (!btn || !lbl) return;
+    lbl.textContent = draft.note ? "Note set" : "Add Note";
+    btn.classList.toggle("has-note", !!draft.note);
+  }
+
+  document.getElementById("noteBtn").addEventListener("click", () => {
+    document.getElementById("noteText").value = draft.note;
+    document.getElementById("noteModal").hidden = false;
+    setTimeout(() => document.getElementById("noteText").focus(), 50);
+  });
+  document.getElementById("noteSave").addEventListener("click", () => {
+    draft.note = document.getElementById("noteText").value.trim();
+    document.getElementById("noteModal").hidden = true;
+    paintNote();
+  });
+  document.getElementById("noteCancel").addEventListener("click", () => {
+    document.getElementById("noteModal").hidden = true;
+  });
+
+  // ---- toolbar ----
+  document.getElementById("exportCsvBtn").addEventListener("click", () => exportCSV(plays, game, teamSettings));
+  document.getElementById("exportHudlBtn").addEventListener("click", () => exportHudl(plays, game, teamSettings));
+  document.getElementById("printBtn").addEventListener("click", () => window.print());
+  document.getElementById("quickReportBtn").addEventListener("click", () => {
+    document.getElementById("reportOverlay").hidden = false;
+    document.querySelectorAll(".rtab").forEach((b, i) => b.classList.toggle("active", i === 0));
+    renderReportTab("eff");
+  });
+  document.getElementById("reportClose").addEventListener("click", () => {
+    document.getElementById("reportOverlay").hidden = true;
+  });
+  document.getElementById("reportBody").addEventListener("click", (e) => {
+    const row = e.target.closest("[data-drill]");
+    if (!row) return;
+    const callName = row.getAttribute("data-drill");
+    document.getElementById("drillTitle").textContent = callName;
+    document.getElementById("drillBody").innerHTML = buildDrillDown(callName);
+    document.getElementById("drillModal").hidden = false;
+  });
+  document.getElementById("drillClose").addEventListener("click", () => {
+    document.getElementById("drillModal").hidden = true;
+  });
+  document.getElementById("drillModal").addEventListener("click", (e) => {
+    if (e.target === document.getElementById("drillModal"))
+      document.getElementById("drillModal").hidden = true;
+  });
+  document.querySelectorAll(".rtab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".rtab").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      renderReportTab(btn.getAttribute("data-tab"));
+    });
+  });
+
+  // ---- quick report renderer ----
+  function renderReportTab(tab) {
+    const body = document.getElementById("reportBody");
+    if (!plays.length) {
+      body.innerHTML = '<div class="report-empty">No plays logged yet.</div>';
+      return;
+    }
+
+    function groupBy(field) {
+      const map = {};
+      plays.forEach((p) => {
+        const k = p[field] || "(none)";
+        if (!map[k]) map[k] = { key: k, n: 0, succ: 0, yards: 0 };
+        map[k].n++;
+        if (p.success) map[k].succ++;
+        map[k].yards += Number(p.yards) || 0;
+      });
+      return Object.values(map);
+    }
+
+    function rptRow(label, n, succ, yards, drillKey) {
+      const effPct = n ? Math.round(100 * succ / n) : 0;
+      const avg    = n ? (yards / n).toFixed(1) : "0.0";
+      const color  = effPct >= 50 ? "#15803d" : "#b91c1c";
+      const drillAttr = drillKey ? ` data-drill="${esc(drillKey)}" style="cursor:pointer"` : "";
+      return `<div class="rpt-row"${drillAttr}>
+        <div class="rpt-label">${esc(label)}</div>
+        <div class="rpt-stats">
+          <span class="rpt-n">${n} play${n !== 1 ? "s" : ""}</span>
+          <span class="rpt-avg">${avg} yds/play</span>
+          <span class="rpt-eff" style="color:${color}">${effPct}% effective</span>
+        </div>
+        <div class="rpt-bar-wrap"><div class="rpt-bar" style="width:${effPct}%"></div></div>
+      </div>`;
+    }
+
+    let html = "";
+
+    if (tab === "eff" || tab === "ineff") {
+      const groups = groupBy("call").filter((g) => g.n >= 2);
+      groups.sort((a, b) => {
+        const ae = a.n ? a.succ / a.n : 0, be = b.n ? b.succ / b.n : 0;
+        return tab === "eff" ? be - ae : ae - be;
+      });
+      const top = groups.slice(0, 10);
+      html = top.length
+        ? top.map((g) => rptRow(g.key, g.n, g.succ, g.yards, g.key)).join("")
+        : '<div class="report-empty">Need at least 2 plays per call to rank.</div>';
+    }
+
+    if (tab === "call") {
+      function typeSection(label, subset) {
+        if (!subset.length) return "";
+        const map = {};
+        subset.forEach((p) => {
+          const k = p.call || "(no call)";
+          if (!map[k]) map[k] = { key: k, n: 0, succ: 0, yards: 0 };
+          map[k].n++; if (p.success) map[k].succ++; map[k].yards += Number(p.yards) || 0;
+        });
+        const arr = Object.values(map).sort((a, b) => b.n - a.n);
+        return `<div class="rpt-group-head">${label}</div>` +
+          arr.map((g) => rptRow(g.key, g.n, g.succ, g.yards)).join("");
+      }
+      html = typeSection("Run Plays", plays.filter((p) => p.type === "run")) +
+             typeSection("Pass Plays", plays.filter((p) => p.type === "pass")) +
+             typeSection("Punts",      plays.filter((p) => p.type === "punt"));
+      if (!html) html = '<div class="report-empty">No plays logged yet.</div>';
+    }
+
+    if (tab === "down") {
+      html = [1, 2, 3, 4].map((d) => {
+        const sub = plays.filter((p) => String(p.down) === String(d));
+        if (!sub.length) return "";
+        const succ  = sub.filter((p) => p.success).length;
+        const yards = sub.reduce((s, p) => s + (Number(p.yards) || 0), 0);
+        const suf   = d === 1 ? "st" : d === 2 ? "nd" : d === 3 ? "rd" : "th";
+        return rptRow(`${d}${suf} Down`, sub.length, succ, yards);
+      }).filter(Boolean).join("");
+      if (!html) html = '<div class="report-empty">No plays with down data.</div>';
+    }
+
+    if (tab === "hash") {
+      const labels = { L: "Left Hash", M: "Middle", R: "Right Hash" };
+      html = ["L", "M", "R"].map((h) => {
+        const sub = plays.filter((p) => p.hash === h);
+        if (!sub.length) return "";
+        const succ  = sub.filter((p) => p.success).length;
+        const yards = sub.reduce((s, p) => s + (Number(p.yards) || 0), 0);
+        return rptRow(labels[h], sub.length, succ, yards);
+      }).filter(Boolean).join("");
+      if (!html) html = '<div class="report-empty">No plays with hash data.</div>';
+    }
+
+    if (tab === "players") {
+      html = buildPlayersReport(plays, teamSettings);
+    }
+
+    body.innerHTML = html || '<div class="report-empty">No data for this view.</div>';
+  }
+
+  // ---- quick-report drill-down ----
+  function buildDrillDown(callName) {
+    const nameKey = callName.toLowerCase();
+    const matching = plays.filter((p) => (p.call || "").trim().toLowerCase() === nameKey);
+    if (!matching.length) return '<div class="report-empty">No matching plays found.</div>';
+    const total = matching.length;
+    const effCount = matching.filter((p) => p.success).length;
+    const totalYds = matching.reduce((a, p) => a + (Number(p.yards) || 0), 0);
+    const rate = Math.round(100 * effCount / total);
+    const avgYds = (totalYds / total).toFixed(1);
+    const statsHtml = `<div class="drill-stats">
+      <span><b>${total}</b>times run</span>
+      <span><b>${effCount}/${total}</b>effective</span>
+      <span><b>${rate}%</b>success rate</span>
+      <span><b>${totalYds >= 0 ? "+" : ""}${avgYds}</b>avg yards</span>
+    </div>`;
+    const rows = matching.map((p, i) => {
+      const dir = p.yards > 0 ? "up" : p.yards < 0 ? "down" : "flat";
+      const sign = p.yards > 0 ? "+" : "";
+      const ctx = p.mode === "scrimmage" ? `Ser ${esc(p.series || "")}` : `Q${esc(p.qtr || "")}`;
+      const tags = (p.tags || []).length
+        ? `<span style="font-size:11px;color:var(--slate)">${p.tags.map(esc).join(", ")}</span>`
+        : "";
+      return `<tr>
+        <td><b style="font-family:var(--num)">${i + 1}</b></td>
+        <td>${ctx}</td>
+        <td><b style="font-family:var(--num)">${dnDist(p)}</b></td>
+        <td>${p.yl != null && p.yl !== "" ? esc(String(p.yl)) : "&ndash;"}<span style="color:var(--slate);font-size:11px"> ${esc(p.hash || "")}</span></td>
+        <td>${esc(p.form || "—")}</td>
+        <td>${tags}</td>
+        <td><span class="res ${dir}">${sign}${p.yards}</span></td>
+        <td><span class="succ ${p.success ? "y" : "n"} static">${p.success ? "✓" : "✗"}</span></td>
+      </tr>`;
+    }).join("");
+    return statsHtml + `<div class="table-scroll"><table><thead><tr>
+      <th>#</th><th>Qtr/Ser</th><th>Dn &amp; Dist</th><th>Ball On</th><th>Formation</th><th>Tags</th><th>Yds</th><th>Eff</th>
+    </tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
   // ---- stepper buttons ----
   function stepYl(delta) {
     const v = parseInt(document.getElementById("yl").value, 10) || 1;
@@ -770,10 +1167,17 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     if (!plays.length) {
       body.innerHTML = `<tr><td colspan="12"><div class="empty"><div class="big">No plays yet</div>Log your first snap above and the chart fills in.</div></td></tr>`;
     } else {
+      const rosterMap = {};
+      (teamSettings.roster || []).forEach(p => rosterMap[p.id] = p);
       body.innerHTML = plays.map((p, i) => {
         const dir  = p.yards > 0 ? "up" : p.yards < 0 ? "down" : "flat";
         const sign = p.yards > 0 ? "+" : "";
         const tags = (p.tags || []).map((t) => `<span class="tag">${esc(t)}</span>`).join("");
+        const pInfo = [];
+        if (p.passer   && rosterMap[p.passer])   pInfo.push(`#${esc(rosterMap[p.passer].jersey)} ${esc(rosterMap[p.passer].name)}`);
+        if (p.receiver && rosterMap[p.receiver]) pInfo.push(`&rarr; #${esc(rosterMap[p.receiver].jersey)} ${esc(rosterMap[p.receiver].name)}`);
+        if (p.rusher   && rosterMap[p.rusher])   pInfo.push(`#${esc(rosterMap[p.rusher].jersey)} ${esc(rosterMap[p.rusher].name)}`);
+        const playerNote = pInfo.length ? `<div style="font-size:11px;color:var(--slate);margin-top:2px">${pInfo.join(" ")}</div>` : "";
         return `<tr class="${esc(p.type)}" data-id="${esc(p.id)}">` +
           `<td><b style="font-family:var(--num)">${i + 1}</b></td>` +
           `<td>${esc(p.qtr)}</td>` +
@@ -785,7 +1189,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
             (p.front    ? `<div class="mtag" style="color:var(--muted)">front: ${esc(p.front)}</div>` : "") +
             (p.coverage ? `<div class="mtag" style="color:var(--muted)">cov: ${esc(p.coverage)}</div>` : "") +
           `</td>` +
-          `<td>${esc(p.call || "—")}</td>` +
+          `<td>${esc(p.call || "—")}${playerNote}</td>` +
           `<td><span class="res ${dir}">${sign}${p.yards}</span></td>` +
           (canChart
             ? `<td><button class="succ ${p.success ? "y" : "n"}" data-id="${esc(p.id)}">${p.success ? "✓" : "✗"}</button></td>`
@@ -990,6 +1394,19 @@ function buildHTML(game, mode) {
         </div>
       </div>
 
+      <div class="form-row" id="passerRow" style="display:none">
+        <label class="form-label">Passer</label>
+        <select id="fPasser" class="field sel-half"><option value="">— select —</option></select>
+      </div>
+      <div class="form-row" id="receiverRow" style="display:none">
+        <label class="form-label">Receiver</label>
+        <select id="fReceiver" class="field sel-half"><option value="">— select —</option></select>
+      </div>
+      <div class="form-row" id="rusherRow" style="display:none">
+        <label class="form-label">Rusher</label>
+        <select id="fRusher" class="field sel-half"><option value="">— select —</option></select>
+      </div>
+
       <div class="row">
         <div class="fld grow" id="frontFld"><label>Defensive front</label>
           <input id="front" type="text" autocomplete="off" autocapitalize="words"
@@ -1035,6 +1452,7 @@ function buildHTML(game, mode) {
 
       <div class="row">
         <button class="add" id="addBtn">+ Add Play</button>
+        <button class="note-btn" id="noteBtn" type="button">&#128221; <span id="noteBtnLabel">Add Note</span></button>
         <button class="cancel" id="cancelEdit" type="button" hidden>Cancel</button>
       </div>
     </section>
@@ -1055,6 +1473,42 @@ function buildHTML(game, mode) {
     </div>
 
     <div class="splits" id="splits"></div>
+
+    <div class="game-toolbar">
+      <button class="toolbar-btn primary" id="quickReportBtn">&#128203; Quick Report</button>
+      <button class="toolbar-btn" id="exportCsvBtn">Export CSV</button>
+      <button class="toolbar-btn" id="exportHudlBtn">Export for Hudl</button>
+      <button class="toolbar-btn" id="printBtn">Print</button>
+    </div>
+  </div>
+
+  <div class="modal-back" id="noteModal" hidden>
+    <div class="modal">
+      <h2>Play Note</h2>
+      <textarea id="noteText" class="note-area" placeholder="Notes for this play..."></textarea>
+      <div class="modal-btns" style="flex-direction:row;gap:10px">
+        <button class="btn-primary" id="noteSave">Save Note</button>
+        <button class="modal-cancel" id="noteCancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-back" id="reportOverlay" hidden>
+    <div class="report-panel">
+      <div class="report-head">
+        <h2>Quick Report</h2>
+        <button class="back" id="reportClose">&#x2715;</button>
+      </div>
+      <div class="report-tabs">
+        <button class="rtab active" data-tab="eff">Most Effective</button>
+        <button class="rtab" data-tab="ineff">Least Effective</button>
+        <button class="rtab" data-tab="call">By Play Call</button>
+        <button class="rtab" data-tab="down">By Down</button>
+        <button class="rtab" data-tab="hash">By Hash</button>
+        <button class="rtab" data-tab="players">Players</button>
+      </div>
+      <div class="report-body" id="reportBody"></div>
+    </div>
   </div>
 
   <div class="modal-back" id="penaltyModal" hidden>
@@ -1065,6 +1519,16 @@ function buildHTML(game, mode) {
         <button class="mode-pick" id="penaltyYes"><b>Yes &mdash; replay the down</b><span>Same down &middot; distance adjusted for yards</span></button>
         <button class="mode-pick" id="penaltyNo"><b>No &mdash; advance normally</b><span>Apply standard yardage rules</span></button>
       </div>
+    </div>
+  </div>
+
+  <div class="modal-back" id="drillModal" hidden>
+    <div class="modal modal-wide">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px">
+        <h2 id="drillTitle" style="margin:0;font-size:18px"></h2>
+        <button id="drillClose" class="modal-cancel" style="margin:0;flex:none;font-size:22px;line-height:1;padding:0 6px">&times;</button>
+      </div>
+      <div id="drillBody" class="drill-scroll"></div>
     </div>
   </div>
 </div>`;
