@@ -735,13 +735,10 @@ tr[data-drill]:hover td { background: #EEF2FF; }
 .hm-f.hm-f-on { background:var(--royal); color:#fff; border-color:var(--royal) }
 .hm-total { margin-left:auto; color:var(--slate); font-size:13px }
 .hm-field { display:flex; align-items:stretch; border:2px solid #374151; border-radius:8px; overflow:hidden; margin-bottom:10px }
-.hm-ez { width:34px; flex-shrink:0; display:flex; align-items:center; justify-content:center; background:#1a4a1a }
-.hm-ez span { color:rgba(255,255,255,.55); font-family:var(--num); font-size:9px; text-transform:uppercase; letter-spacing:.07em; writing-mode:vertical-rl }
-.hm-ez-own span { transform:rotate(180deg) }
 .hm-grid-wrap { flex:1; display:flex; flex-direction:column; background:#1e5c1e }
-.hm-zone-row { display:flex; border-bottom:1px solid rgba(255,255,255,.18) }
-.hm-hlbl-spc { width:72px; flex-shrink:0 }
-.hm-zh { flex:1; text-align:center; color:rgba(255,255,255,.8); font-family:var(--num); font-size:10px; padding:5px 2px; text-transform:uppercase; letter-spacing:.04em; border-left:1px solid rgba(255,255,255,.12) }
+.hm-zone-header { display:flex; align-items:flex-end; margin-bottom:4px }
+.hm-zh-spc { width:72px; flex-shrink:0 }
+.hm-zh { flex:1; min-width:0; text-align:center; font-family:var(--num); font-size:10px; padding:2px 2px 4px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:600; border-left:1px solid var(--border,#D1D5DB); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .hm-row { display:flex; border-bottom:1px solid rgba(255,255,255,.1) }
 .hm-row:last-child { border-bottom:0 }
 .hm-hlbl { width:72px; flex-shrink:0; display:flex; align-items:center; justify-content:flex-end; padding:4px 8px 4px 0; color:rgba(255,255,255,.72); font-size:11px; font-family:var(--num) }

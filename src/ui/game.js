@@ -336,13 +336,11 @@ export function buildHeatMap(playsArr, filterType) {
       <button class="hm-f${filterType === "pass" ? " hm-f-on" : ""}" data-hmf="pass">Pass</button>
       <span class="hm-total">${totalPlays} play${totalPlays !== 1 ? "s" : ""} charted</span>
     </div>
+    <div class="hm-zone-header"><div class="hm-zh-spc"></div>${zoneHdrs}</div>
     <div class="hm-field">
-      <div class="hm-ez hm-ez-own"><span>Own End Zone</span></div>
       <div class="hm-grid-wrap">
-        <div class="hm-zone-row"><div class="hm-hlbl-spc"></div>${zoneHdrs}</div>
         ${rows}
       </div>
-      <div class="hm-ez hm-ez-opp"><span>Opp End Zone</span></div>
     </div>
     <div class="hm-legend">
       <span class="hm-leg-item"><span class="hm-swatch" style="background:#E8EBF0"></span>No plays</span>
