@@ -89,6 +89,32 @@ html, body {
   background: #FEE2E2; color: var(--bad); border-radius: 8px;
   padding: 10px 12px; font-size: 13px; margin-bottom: 14px;
 }
+.auth-success {
+  background: #D1FAE5; color: #065F46; border-radius: 8px;
+  padding: 10px 12px; font-size: 13px; margin-bottom: 14px;
+}
+
+/* Password field with show/hide toggle */
+.pw-wrap { position: relative; display: flex; align-items: center; }
+.pw-wrap input { flex: 1; padding-right: 40px; }
+.pw-toggle {
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer; padding: 0 10px;
+  color: var(--slate); display: flex; align-items: center;
+}
+.pw-toggle:hover { color: var(--royal); }
+
+/* Forgot password link */
+.forgot-row { text-align: right; margin: -8px 0 14px; }
+.link-btn {
+  background: none; border: none; cursor: pointer; padding: 0;
+  color: var(--royal-2); font-size: 13px; text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.link-btn:hover { color: var(--royal); }
+
+/* Reset panel */
+.reset-hint { font-size: 14px; color: var(--slate); margin: 0 0 18px; line-height: 1.5; }
 
 #authForm .btn-primary { width: 100%; font-size: 16px; padding: 12px; margin-top: 4px; }
 

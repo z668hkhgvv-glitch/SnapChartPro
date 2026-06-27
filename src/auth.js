@@ -3,6 +3,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  sendPasswordResetEmail,
 } from "firebase/auth";
 import { auth } from "./firebase.js";
 
@@ -19,6 +20,10 @@ export function logoutCoach() {
 }
 
 // cb(user) — user is null when logged out
+export function resetPassword(email) {
+  return sendPasswordResetEmail(auth, email);
+}
+
 export function onAuthChange(cb) {
   return onAuthStateChanged(auth, cb);
 }
