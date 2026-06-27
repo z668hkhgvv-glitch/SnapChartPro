@@ -159,7 +159,8 @@ export function renderLogin(container) {
         await registerCoach(email, password);
       }
     } catch (err) {
-      errEl.textContent = friendlyError(err.code);
+      console.error("Auth error:", err.code, err.message);
+      errEl.textContent = friendlyError(err.code, err.message);
       errEl.hidden = false;
       btn.disabled = false;
       btn.textContent = mode === "login" ? "Sign In" : "Create Account";
@@ -167,15 +168,27 @@ export function renderLogin(container) {
   });
 }
 
-function friendlyError(code) {
+function friendlyError(code, message = "") {
   const map = {
-    "auth/user-not-found":        "No account found with that email.",
-    "auth/wrong-password":        "Incorrect password.",
-    "auth/invalid-credential":    "Email or password is incorrect.",
-    "auth/email-already-in-use":  "An account with that email already exists.",
-    "auth/weak-password":         "Password must be at least 6 characters.",
-    "auth/invalid-email":         "Please enter a valid email address.",
-    "auth/too-many-requests":     "Too many attempts. Try again later.",
+    // Wrong credentials
+    "auth/user-not-found":           "No account found with that email.",
+    "auth/wrong-password":           "Incorrect password.",
+    "auth/invalid-credential":       "Email or password is incorrect.",
+    "auth/invalid-login-credentials":"Email or password is incorrect.",
+    // Account issues
+    "auth/email-already-in-use":     "An account with that email already exists.",
+    "auth/user-disabled":            "This account has been disabled. Contact support.",
+    "auth/operation-not-allowed":    "Email/password sign-in is not enabled. Contact support.",
+    // Input issues
+    "auth/weak-password":            "Password must be at least 6 characters.",
+    "auth/invalid-email":            "Please enter a valid email address.",
+    "auth/missing-email":            "Please enter your email address.",
+    "auth/missing-password":         "Please enter your password.",
+    // Rate limiting / network
+    "auth/too-many-requests":        "Too many attempts — wait a few minutes and try again.",
+    "auth/network-request-failed":   "Network error — check your connection and try again.",
   };
-  return map[code] || "Something went wrong. Please try again.";
+  if (map[code]) return map[code];
+  // Surface the raw code so it's diagnosable without opening DevTools
+  return code ? `Sign-in failed (${code}).` : "Something went wrong — check your connection and try again.";
 }
