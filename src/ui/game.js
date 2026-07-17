@@ -406,6 +406,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   // Change 3 — scrimmage ball tracking (fixed/simulated modes)
   let scrimmStartYl   = null;
   let scrimmStartSign = -1;
+  let timedSeries     = 1;
   // Change 4 — TD re-spot state
   let isTouchdown = false;
   let hmFilter = "";
@@ -662,6 +663,16 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   }
   function updateScrimHint() {
     if (mode !== "scrimmage") return;
+    if (settings.scrimmageMode === "timed") {
+      const playsThisPeriod = plays.filter(p => String(p.series) === String(timedSeries)).length;
+      document.getElementById("seriesHint").innerHTML =
+        `Period <b>${timedSeries}</b> · <b>${playsThisPeriod}</b> play${playsThisPeriod !== 1 ? "s" : ""} logged`;
+      const btn = document.getElementById("timeExpiredBtn");
+      if (btn) btn.style.display = "";
+      return;
+    }
+    const btn = document.getElementById("timeExpiredBtn");
+    if (btn) btn.style.display = "none";
     const sp = settings.effScrimPlays || 10;
     const playNum = (plays.length % sp) + 1;
     const series  = Math.floor(plays.length / sp) + 1;
@@ -680,6 +691,12 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     updateScrimHint();
   }
 
+  // Timed period — "Time Expired" button
+  document.getElementById("timeExpiredBtn").addEventListener("click", () => {
+    timedSeries++;
+    updateScrimHint();
+  });
+
   function applyModeVisibility() {
     const isSimScrim = isScrim && settings.scrimmageMode === "simulated";
     document.getElementById("qtrFld").style.display   = is7 || isScrim ? "none" : "";
@@ -691,7 +708,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     const modeBadge = document.getElementById("modeBadge");
     if (modeBadge) {
       modeBadge.style.display = is7 || isScrim ? "" : "none";
-      modeBadge.textContent = is7 ? "7v7 · pass-only" : isScrim ? `Scrimmage · ${settings.effScrimPlays || 10}-play series` : "";
+      modeBadge.textContent = is7 ? "7v7 · pass-only" : isScrim ? (settings.scrimmageMode === "timed" ? "Scrimmage · Timed periods" : `Scrimmage · ${settings.effScrimPlays || 10}-play series`) : "";
     }
     const ylSignBtnEl = document.getElementById("ylSignBtn");
     const ylHintEl    = document.getElementById("ylHint");
@@ -1300,8 +1317,14 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     if (playData.receiver) lastReceiver = playData.receiver;
     if (playData.rusher)   lastRusher   = playData.rusher;
     if (isScrim) {
-      playData.playNum = (plays.length % sp) + 1;
-      playData.series  = Math.floor(plays.length / sp) + 1;
+      if (settings.scrimmageMode === "timed") {
+        const playsInPeriod = plays.filter(p => String(p.series) === String(timedSeries)).length;
+        playData.playNum = playsInPeriod + 1;
+        playData.series  = timedSeries;
+      } else {
+        playData.playNum = (plays.length % sp) + 1;
+        playData.series  = Math.floor(plays.length / sp) + 1;
+      }
     }
 
     // Auto-tag Turnover on failed 4th down
@@ -2269,6 +2292,7 @@ function buildHTML(game, mode) {
 
       <div class="row" id="seriesRow" style="display:none">
         <div class="series-hint" id="seriesHint"></div>
+        <button type="button" id="timeExpiredBtn" class="btn-secondary" style="display:none;margin-left:10px;flex-shrink:0;font-size:13px;height:34px;padding:0 12px">&#9203; Time Expired</button>
       </div>
 
       <div class="row">

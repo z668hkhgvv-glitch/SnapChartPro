@@ -483,6 +483,7 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
                 <option value="advance"   ${currentScrimMode === 'advance'   ? 'selected' : ''}>Advance (ball moves after each series)</option>
                 <option value="fixed"     ${currentScrimMode === 'fixed'     ? 'selected' : ''}>Fixed (ball stays at starting spot)</option>
                 <option value="simulated" ${currentScrimMode === 'simulated' ? 'selected' : ''}>Simulated (game-like with downs)</option>
+                <option value="timed"     ${currentScrimMode === 'timed'     ? 'selected' : ''}>Timed (periods end manually)</option>
               </select>
 
               <label>Plays per Series</label>
