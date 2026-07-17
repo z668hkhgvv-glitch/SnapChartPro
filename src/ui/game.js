@@ -440,9 +440,10 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     line2_7v7:      teamSettings.settings?.line2_7v7      ?? 5,
     playsPerSeries7v7: teamSettings.settings?.playsPerSeries7v7 ?? 4,
     eff7v7Mode:     teamSettings.settings?.eff7v7Mode     ?? "pace",
-    // Change 3 — scrimmage ball-movement mode
+    // Change 3 — scrimmage ball-movement mode and series type
     scrimmageMode:  teamSettings.settings?.scrimmageMode  ?? "advance",
     effScrimPlays:  teamSettings.settings?.effScrimPlays  ?? 10,
+    seriesType:     teamSettings.settings?.scrimmageSeriesType ?? "fixed",
   };
 
   // Draft holds the in-progress form values that are NOT simple text inputs.
@@ -663,7 +664,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   }
   function updateScrimHint() {
     if (mode !== "scrimmage") return;
-    if (settings.scrimmageMode === "timed") {
+    if (settings.seriesType === "timed") {
       const playsThisPeriod = plays.filter(p => String(p.series) === String(timedSeries)).length;
       document.getElementById("seriesHint").innerHTML =
         `Period <b>${timedSeries}</b> · <b>${playsThisPeriod}</b> play${playsThisPeriod !== 1 ? "s" : ""} logged`;
@@ -708,7 +709,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     const modeBadge = document.getElementById("modeBadge");
     if (modeBadge) {
       modeBadge.style.display = is7 || isScrim ? "" : "none";
-      modeBadge.textContent = is7 ? "7v7 · pass-only" : isScrim ? (settings.scrimmageMode === "timed" ? "Scrimmage · Timed periods" : `Scrimmage · ${settings.effScrimPlays || 10}-play series`) : "";
+      modeBadge.textContent = is7 ? "7v7 · pass-only" : isScrim ? (settings.seriesType === "timed" ? "Scrimmage · Timed periods" : `Scrimmage · ${settings.effScrimPlays || 10}-play series`) : "";
     }
     const ylSignBtnEl = document.getElementById("ylSignBtn");
     const ylHintEl    = document.getElementById("ylHint");
@@ -1317,7 +1318,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     if (playData.receiver) lastReceiver = playData.receiver;
     if (playData.rusher)   lastRusher   = playData.rusher;
     if (isScrim) {
-      if (settings.scrimmageMode === "timed") {
+      if (settings.seriesType === "timed") {
         const playsInPeriod = plays.filter(p => String(p.series) === String(timedSeries)).length;
         playData.playNum = playsInPeriod + 1;
         playData.series  = timedSeries;

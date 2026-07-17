@@ -282,8 +282,9 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
   const currentLine2    = teamSettings.line2_7v7      ?? 5;
   const currentPlays7v7 = teamSettings.playsPerSeries7v7 ?? 4;
   const currentEff7v7   = teamSettings.eff7v7Mode     || 'pace';
-  const currentScrimMode = teamSettings.scrimmageMode || 'advance';
-  const currentScrimPlaysEff = teamSettings.effScrimPlays ?? (teamSettings.scrimmPlays ?? 10);
+  const currentScrimMode = teamSettings.settings?.scrimmageMode || teamSettings.scrimmageMode || 'advance';
+  const currentScrimPlaysEff = teamSettings.settings?.effScrimPlays ?? teamSettings.effScrimPlays ?? (teamSettings.scrimmPlays ?? 10);
+  const currentSeriesType = teamSettings.settings?.scrimmageSeriesType || 'fixed';
   const LIB_CATS_PRO = [
     {key:"forms",    label:"Formations"},
     {key:"calls",    label:"Play Calls"},
@@ -479,16 +480,21 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
           <div class="settings-pane" data-pane="scrimmage" hidden>
             <h3 style="margin:0 0 12px;font-size:15px">Scrimmage Settings</h3>
             <div class="chart-defaults-grid">
-              <label>Ball Movement</label>
-              <select id="cfgScrimMode" class="role-sel">
-                <option value="advance"   ${currentScrimMode === 'advance'   ? 'selected' : ''}>Advance (ball moves after each series)</option>
-                <option value="fixed"     ${currentScrimMode === 'fixed'     ? 'selected' : ''}>Fixed (ball stays at starting spot)</option>
-                <option value="simulated" ${currentScrimMode === 'simulated' ? 'selected' : ''}>Simulated (game-like with downs)</option>
-                <option value="timed"     ${currentScrimMode === 'timed'     ? 'selected' : ''}>Timed (periods end manually)</option>
+              <label>Series Type</label>
+              <select id="cfgSeriesType" class="role-sel">
+                <option value="fixed"  ${currentSeriesType === 'fixed'  ? 'selected' : ''}>Fixed plays (set number per series)</option>
+                <option value="timed"  ${currentSeriesType === 'timed'  ? 'selected' : ''}>Timed periods (end manually)</option>
               </select>
 
               <label>Plays per Series</label>
               <input id="cfgEffScrimPlays" type="number" min="1" max="50" value="${currentScrimPlaysEff}">
+
+              <label>Ball Movement</label>
+              <select id="cfgScrimMode" class="role-sel">
+                <option value="advance"   ${currentScrimMode === 'advance'   ? 'selected' : ''}>Advance (ball moves after each play)</option>
+                <option value="fixed"     ${currentScrimMode === 'fixed'     ? 'selected' : ''}>Fixed (ball resets to starting spot)</option>
+                <option value="simulated" ${currentScrimMode === 'simulated' ? 'selected' : ''}>Simulated (track down &amp; distance)</option>
+              </select>
             </div>
             <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
               <button class="btn-secondary" id="saveScrimBtn">Save Scrimmage Settings</button>
@@ -668,6 +674,7 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
     const msgEl = overlay.querySelector("#scrimMsg");
     const effScrimPlays = parseInt(overlay.querySelector("#cfgEffScrimPlays").value, 10) || 10;
     const scrimmageMode = overlay.querySelector("#cfgScrimMode").value;
+    const scrimmageSeriesType = overlay.querySelector("#cfgSeriesType").value;
     try {
       const t = await getTeam(teamId);
       await updateTeam(teamId, {
@@ -675,6 +682,7 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
           ...(t?.settings || {}),
           scrimmageMode,
           effScrimPlays,
+          scrimmageSeriesType,
         },
       });
       msgEl.style.color = "#15803d";
