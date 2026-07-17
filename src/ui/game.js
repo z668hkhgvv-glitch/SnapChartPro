@@ -407,6 +407,9 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   let scrimmStartYl   = null;
   let scrimmStartSign = -1;
   let timedSeries     = 1;
+  let timedIntervalId = null;
+  let timedRunning    = false;
+  let timedRemaining  = 0;
   // Change 4 — TD re-spot state
   let isTouchdown = false;
   let hmFilter = "";
@@ -662,18 +665,45 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     hint.innerHTML = `Play <b>${esc(draft.down)} of 4</b> · reach <b>${targetLabel}</b> · <b>${toGo}</b> to go`;
     refreshAutoEff();
   }
+  function fmtTime(sec) {
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  }
+  function stopTimer() {
+    if (timedIntervalId) { clearInterval(timedIntervalId); timedIntervalId = null; }
+    timedRunning = false;
+  }
+  function tickTimer() {
+    if (timedRemaining > 0) {
+      timedRemaining--;
+      document.getElementById("timerDisplay").textContent = fmtTime(timedRemaining);
+    }
+    if (timedRemaining <= 0) expirePeriod();
+  }
+  function startTicking() {
+    timedRunning = true;
+    timedIntervalId = setInterval(tickTimer, 1000);
+  }
+  function expirePeriod() {
+    stopTimer();
+    timedSeries++;
+    timedRemaining = 0;
+    document.getElementById("timedActive").style.display = "none";
+    document.getElementById("timedIdle").style.display   = "flex";
+    document.getElementById("timerPauseBtn").innerHTML   = "&#9646;&#9646; Pause";
+    updateScrimHint();
+  }
   function updateScrimHint() {
     if (mode !== "scrimmage") return;
+    const ctrl = document.getElementById("timedControls");
     if (settings.seriesType === "timed") {
-      const playsThisPeriod = plays.filter(p => String(p.series) === String(timedSeries)).length;
+      const n = plays.filter(p => String(p.series) === String(timedSeries)).length;
       document.getElementById("seriesHint").innerHTML =
-        `Period <b>${timedSeries}</b> · <b>${playsThisPeriod}</b> play${playsThisPeriod !== 1 ? "s" : ""} logged`;
-      const btn = document.getElementById("timeExpiredBtn");
-      if (btn) btn.style.display = "";
+        `Period <b>${timedSeries}</b> · <b>${n}</b> play${n !== 1 ? "s" : ""} logged`;
+      if (ctrl) ctrl.style.display = "flex";
       return;
     }
-    const btn = document.getElementById("timeExpiredBtn");
-    if (btn) btn.style.display = "none";
+    if (ctrl) ctrl.style.display = "none";
     const sp = settings.effScrimPlays || 10;
     const playNum = (plays.length % sp) + 1;
     const series  = Math.floor(plays.length / sp) + 1;
@@ -692,11 +722,25 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     updateScrimHint();
   }
 
-  // Timed period — "Time Expired" button
-  document.getElementById("timeExpiredBtn").addEventListener("click", () => {
-    timedSeries++;
-    updateScrimHint();
+  // Timed period controls
+  document.getElementById("timerStartBtn").addEventListener("click", () => {
+    const mins = Math.max(1, parseInt(document.getElementById("timedMinsInput").value, 10) || 5);
+    timedRemaining = mins * 60;
+    document.getElementById("timerDisplay").textContent = fmtTime(timedRemaining);
+    document.getElementById("timedIdle").style.display   = "none";
+    document.getElementById("timedActive").style.display = "flex";
+    startTicking();
   });
+  document.getElementById("timerPauseBtn").addEventListener("click", () => {
+    if (timedRunning) {
+      stopTimer();
+      document.getElementById("timerPauseBtn").innerHTML = "&#9654; Resume";
+    } else {
+      document.getElementById("timerPauseBtn").innerHTML = "&#9646;&#9646; Pause";
+      startTicking();
+    }
+  });
+  document.getElementById("timeExpiredBtn").addEventListener("click", expirePeriod);
 
   function applyModeVisibility() {
     const isSimScrim = isScrim && settings.scrimmageMode === "simulated";
@@ -2293,7 +2337,19 @@ function buildHTML(game, mode) {
 
       <div class="row" id="seriesRow" style="display:none">
         <div class="series-hint" id="seriesHint"></div>
-        <button type="button" id="timeExpiredBtn" class="btn-secondary" style="display:none;margin-left:10px;flex-shrink:0;font-size:13px;height:34px;padding:0 12px">&#9203; Time Expired</button>
+        <div id="timedControls" style="display:none;align-items:center;gap:8px;margin-left:10px;flex-shrink:0;flex-wrap:wrap">
+          <div id="timedIdle" style="display:flex;align-items:center;gap:6px">
+            <input type="number" id="timedMinsInput" min="1" max="99" value="5"
+                   style="width:52px;padding:4px 6px;font-size:14px;border:1.5px solid var(--border,#D1D5DB);border-radius:6px;font-family:var(--num);text-align:center">
+            <span style="font-size:12px;color:var(--slate)">min</span>
+            <button type="button" id="timerStartBtn" class="btn-secondary" style="font-size:13px;height:34px;padding:0 14px">&#9654; Start</button>
+          </div>
+          <div id="timedActive" style="display:none;align-items:center;gap:6px">
+            <span id="timerDisplay" style="font-family:var(--num);font-size:20px;font-weight:700;color:var(--royal);min-width:56px;text-align:center">5:00</span>
+            <button type="button" id="timerPauseBtn" class="btn-secondary" style="font-size:13px;height:34px;padding:0 14px">&#9646;&#9646; Pause</button>
+          </div>
+          <button type="button" id="timeExpiredBtn" class="btn-secondary" style="font-size:13px;height:34px;padding:0 12px">&#9203; Time Expired</button>
+        </div>
       </div>
 
       <div class="row">
