@@ -77,6 +77,7 @@ export async function renderDashboard(container, user, teamId, userRole, onRefre
           </svg>
         </div>
         <div class="dash-header-right">
+          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.1.0</span>
           <span class="coach-email" id="headerTeamName">${esc(teamName)}</span>
           <span class="role-badge role-${userRole}">${roleName(userRole)}</span>
           ${isAdmin

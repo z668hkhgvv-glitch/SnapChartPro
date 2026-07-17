@@ -58,7 +58,7 @@ export function renderLogin(container) {
           </div>
         </div>
 
-        <p class="auth-footer">SidelineLabz &middot; SnapChart Pro</p>
+        <p class="auth-footer">SidelineLabz &middot; SnapChart Pro <span style="font-family:var(--num);font-size:11px;opacity:0.6;margin-left:4px">1.1.0</span></p>
       </div>
     </div>
   `;
