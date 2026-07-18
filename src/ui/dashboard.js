@@ -312,6 +312,7 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
           <button class="snav-btn" data-pane="scrimmage">Scrimmage</button>
           <button class="snav-btn" data-pane="team">Team</button>
           <button class="snav-btn" data-pane="data">Data</button>
+          <button class="snav-btn" data-pane="bugfixes">Bug Fixes</button>
           <button id="settingsClose" class="snav-close">&#x2715; Close</button>
         </nav>
         <div class="settings-content">
@@ -533,7 +534,10 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
               <span id="exportMsg" style="font-size:12px;display:none"></span>
             </div>
 
-            <h3 style="margin:24px 0 8px;font-size:15px">Repair Player Stats</h3>
+          </div>
+
+          <div class="settings-pane" data-pane="bugfixes" hidden>
+            <h3 style="margin:0 0 8px;font-size:15px">Repair Player Stats</h3>
             <p style="font-size:13px;color:var(--slate);margin:0 0 12px">Fixes a past bug where the passer was recorded on run plays and the rusher on pass plays, inflating per-player counts. Scans every play across all games and clears mismatched player fields. Safe to run more than once.</p>
             <div style="display:flex;align-items:center;gap:10px">
               <button class="btn-secondary" id="repairPlayerBtn">Fix Player Stats</button>
