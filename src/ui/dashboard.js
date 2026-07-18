@@ -6,6 +6,7 @@ import {
   inviteCoach, cancelInvite,
   updateMemberRole, removeMember,
   getPlays, getSeasons, archiveSeason,
+  updatePlay,
 } from "../db.js";
 import { renderGame, buildHeatMap, buildRedZone } from "./game.js";
 
@@ -531,6 +532,13 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
               <button class="btn-secondary" id="exportJsonBtn">Export Team Data (JSON)</button>
               <span id="exportMsg" style="font-size:12px;display:none"></span>
             </div>
+
+            <h3 style="margin:24px 0 8px;font-size:15px">Repair Player Stats</h3>
+            <p style="font-size:13px;color:var(--slate);margin:0 0 12px">Fixes a past bug where the passer was recorded on run plays and the rusher on pass plays, inflating per-player counts. Scans every play across all games and clears mismatched player fields. Safe to run more than once.</p>
+            <div style="display:flex;align-items:center;gap:10px">
+              <button class="btn-secondary" id="repairPlayerBtn">Fix Player Stats</button>
+              <span id="repairMsg" style="font-size:13px;display:none"></span>
+            </div>
           </div>
 
         </div>
@@ -731,6 +739,46 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
     }
     btn.disabled = false;
     btn.textContent = "Export Team Data (JSON)";
+  });
+
+  overlay.querySelector("#repairPlayerBtn").addEventListener("click", async () => {
+    const msgEl = overlay.querySelector("#repairMsg");
+    const btn   = overlay.querySelector("#repairPlayerBtn");
+    if (!confirm("This will scan every play across all games and clear player fields that don't match the play type. Continue?")) return;
+    btn.disabled = true;
+    btn.textContent = "Scanning…";
+    msgEl.style.display = "none";
+    try {
+      const games = await getGames(teamId);
+      let fixed = 0, checked = 0;
+      for (const g of games) {
+        const plays = await getPlays(teamId, g.id);
+        for (const p of plays) {
+          checked++;
+          const patch = {};
+          if (p.type !== "pass" && (p.passer || p.receiver)) {
+            patch.passer   = "";
+            patch.receiver = "";
+          }
+          if (p.type !== "run" && p.rusher) {
+            patch.rusher = "";
+          }
+          if (Object.keys(patch).length) {
+            await updatePlay(teamId, g.id, p.id, patch);
+            fixed++;
+          }
+        }
+      }
+      msgEl.style.color = "#15803d";
+      msgEl.textContent = `Done — fixed ${fixed} of ${checked} plays.`;
+      msgEl.style.display = "inline";
+    } catch (err) {
+      msgEl.style.color = "#DC2626";
+      msgEl.textContent = "Error: " + err.message;
+      msgEl.style.display = "inline";
+    }
+    btn.disabled = false;
+    btn.textContent = "Fix Player Stats";
   });
 
   // Save charting defaults
