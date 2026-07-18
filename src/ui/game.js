@@ -1792,13 +1792,18 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       table{width:100%;border-collapse:collapse;font-size:12px}
       th{text-align:left;font-weight:600;padding:5px 6px;border-bottom:2px solid #e5e7eb;color:#6b7280;font-size:11px;text-transform:uppercase;white-space:nowrap}
       td{padding:5px 6px;border-bottom:1px solid #f3f4f6}
-      @media print{body{padding:12px}}
+      @media print{body{padding:12px}.no-print{display:none}}
     </style></head><body>
+      <div class="no-print" style="margin-bottom:16px;display:flex;align-items:center;gap:12px">
+        <button onclick="window.print()" style="font-family:Inter,sans-serif;font-size:13px;padding:6px 14px;background:#16317f;color:#fff;border:none;border-radius:6px;cursor:pointer">&#128438; Save PDF</button>
+        <button onclick="window.close()" style="font-family:Inter,sans-serif;font-size:13px;padding:6px 14px;background:#f3f4f6;color:#0f1830;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer">&#x2190; Back to App</button>
+      </div>
       <h1>${gameTitle}</h1>${gameDate ? `<div class="pdf-sub">${gameDate}</div>` : ""}
       ${bodyHtml}
       ${playLogHtml}
     </body></html>`);
     win.document.close();
+    win.onafterprint = () => win.close();
     setTimeout(() => { win.print(); }, 400);
   });
   document.getElementById("reportBody").addEventListener("click", (e) => {
