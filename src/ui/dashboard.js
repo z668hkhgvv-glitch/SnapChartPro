@@ -1245,6 +1245,13 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
     }
   });
 
+  // Load team settings for opening archived games
+  let srTeamSettings = {};
+  try {
+    const t = await getTeam(teamId);
+    srTeamSettings = { ...(t?.settings || {}), trackPlayers: t?.trackPlayers || false, roster: t?.roster || [] };
+  } catch (_) {}
+
   // Load all games + their plays
   let allGames, seasons;
   try {
@@ -1323,7 +1330,8 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
             </div>
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
               <span style="font-family:var(--num);font-size:14px">${np} plays · <span style="color:#15803d">${rp}%</span> eff · ${avgp >= 0 ? "+" : ""}${avgp} yds/play</span>
-              <button class="btn-secondary sr-view-btn" data-view-game="${esc(g.id)}">View</button>
+              <button class="btn-primary sr-open-btn" data-open-game="${esc(g.id)}">Full Report</button>
+              <button class="btn-secondary sr-view-btn" data-view-game="${esc(g.id)}">Play Log</button>
               <button class="btn-secondary" data-hm-game="${esc(g.id)}">Heat Map</button>
               <button class="btn-secondary" data-rz-game="${esc(g.id)}">Red Zone</button>
             </div>
@@ -1337,7 +1345,19 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
     body.innerHTML = tabsHtml + `<div class="sr-content">` + statsHtml + topHtml + leastHtml + gamesHtml + `</div>`;
     rewireTabs();
 
-    // Wire game expand buttons
+    // Wire Full Report buttons — open archived game in read-only renderGame
+    body.querySelectorAll(".sr-open-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-open-game");
+        const g = activeGames.find((g) => g.id === id);
+        if (!g) return;
+        renderGame(container, user, teamId, g, "readonly", srTeamSettings, () =>
+          renderSeasonReview(container, user, teamId, userRole, onBack)
+        );
+      });
+    });
+
+    // Wire play log expand buttons
     body.querySelectorAll(".sr-view-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         const id = btn.getAttribute("data-view-game");
@@ -1345,7 +1365,7 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
         if (!detail) return;
         const isOpen = detail.style.display !== "none";
         detail.style.display = isOpen ? "none" : "";
-        btn.textContent = isOpen ? "View" : "Hide";
+        btn.textContent = isOpen ? "Play Log" : "Hide";
       });
     });
 
