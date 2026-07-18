@@ -1745,6 +1745,40 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   document.getElementById("reportClose").addEventListener("click", () => {
     document.getElementById("reportOverlay").hidden = true;
   });
+  document.getElementById("reportPdfBtn").addEventListener("click", () => {
+    const gameTitle = game.opponent ? "vs " + game.opponent : "Game Report";
+    const gameDate  = game.date || "";
+    const bodyHtml  = document.getElementById("reportBody").innerHTML;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${gameTitle}${gameDate ? " – " + gameDate : ""}</title><style>
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:Inter,Arial,sans-serif;font-size:14px;color:#0f1830;padding:24px;max-width:860px;margin:0 auto}
+      h1{font-family:Oswald,"Arial Narrow",sans-serif;font-size:22px;margin-bottom:4px;color:#16317f}
+      .pdf-sub{font-size:12px;color:#6b7280;margin-bottom:20px}
+      .rpt-row{padding:10px 0;border-bottom:1px solid #e5e7eb}
+      .rpt-row:last-child{border-bottom:none}
+      .rpt-label{font-size:14px;font-weight:600;color:#0f1830;margin-bottom:4px}
+      .rpt-stats{display:flex;gap:14px;font-size:12px;color:#6b7280;margin-bottom:6px}
+      .rpt-stats .rpt-eff{font-weight:700}
+      .rpt-bar-wrap{height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden}
+      .rpt-bar{height:100%;background:#1e44c4;border-radius:3px}
+      .report-section-head{font-family:Oswald,"Arial Narrow",sans-serif;font-size:13px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:#6b7280;padding:14px 0 6px;border-bottom:2px solid #e5e7eb;margin-bottom:8px}
+      .report-empty{text-align:center;padding:40px 0;color:#6b7280;font-size:14px}
+      .drill-stats{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px}
+      .drill-stats span{font-size:14px;color:#6b7280}
+      .drill-stats b{font-family:Oswald,"Arial Narrow",sans-serif;color:#0f1830;font-size:17px;display:block}
+      table{width:100%;border-collapse:collapse;font-size:13px}
+      th{text-align:left;font-weight:600;padding:6px 8px;border-bottom:2px solid #e5e7eb;color:#6b7280;font-size:11px;text-transform:uppercase}
+      td{padding:6px 8px;border-bottom:1px solid #f3f4f6}
+      @media print{body{padding:12px}}
+    </style></head><body>
+      <h1>${gameTitle}</h1>${gameDate ? `<div class="pdf-sub">${gameDate}</div>` : ""}
+      ${bodyHtml}
+    </body></html>`);
+    win.document.close();
+    setTimeout(() => { win.print(); }, 400);
+  });
   document.getElementById("reportBody").addEventListener("click", (e) => {
     const hmBtn = e.target.closest("[data-hmf]");
     if (hmBtn) {
@@ -2494,7 +2528,10 @@ function buildHTML(game, mode) {
     <div class="report-panel">
       <div class="report-head">
         <h2>Quick Report</h2>
-        <button class="back" id="reportClose">&#x2715;</button>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="back" id="reportPdfBtn" title="Download PDF" style="font-size:13px;padding:4px 10px;border-radius:6px;background:var(--royal);color:#fff;border:none;cursor:pointer;white-space:nowrap">&#11015; Save PDF</button>
+          <button class="back" id="reportClose">&#x2715;</button>
+        </div>
       </div>
       <div class="report-tabs">
         <button class="rtab active" data-tab="eff">Most Effective</button>
