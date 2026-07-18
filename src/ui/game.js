@@ -1746,59 +1746,120 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     document.getElementById("reportOverlay").hidden = true;
   });
   document.getElementById("reportPdfBtn").addEventListener("click", () => {
-    const gameTitle = game.opponent ? "vs " + game.opponent : "Game Report";
+    const teamName  = teamSettings.name || "My Team";
+    const opponent  = game.opponent ? "vs " + game.opponent : "";
     const gameDate  = game.date || "";
+    const gameMode  = game.mode ? game.mode.charAt(0).toUpperCase() + game.mode.slice(1) : "";
+    const docTitle  = [teamName, opponent, gameDate].filter(Boolean).join(" · ");
     const bodyHtml  = document.getElementById("reportBody").innerHTML;
+    const rosterMap = {};
+    (teamSettings.roster || []).forEach(r => rosterMap[r.id] = r);
     const playRows  = plays.map((p, i) => {
-      const sign = p.yards > 0 ? "+" : "";
-      const ctx  = p.mode === "scrimmage" ? `Ser ${p.series || ""}` : `Q${p.qtr || ""}`;
-      const dn   = p.down ? `${p.down}&amp;${p.dist}` : "&mdash;";
-      const ball = p.yl != null && p.yl !== "" ? `${p.yl} ${p.hash || ""}` : "&mdash;";
-      const tags = (p.tags || []).join(", ");
-      return `<tr>
-        <td>${i + 1}</td><td>${ctx}</td><td>${dn}</td><td>${ball}</td>
-        <td>${p.type || "&mdash;"}</td><td>${esc(p.form || "")}</td>
-        <td>${esc(p.call || "")}</td><td>${esc(tags)}</td>
-        <td>${sign}${p.yards}</td><td>${p.success ? "✓" : "✗"}</td>
+      const sign   = p.yards > 0 ? "+" : "";
+      const ctx    = p.mode === "scrimmage" ? `Ser ${p.series || ""}` : `Q${p.qtr || ""}`;
+      const dn     = p.down ? `${p.down}&amp;${p.dist}` : "&mdash;";
+      const ball   = p.yl != null && p.yl !== "" ? `${p.yl} ${esc(p.hash || "")}` : "&mdash;";
+      const typeLbl = p.type === "run" ? "RUN" : p.type === "punt" ? "PUNT" : "PASS";
+      const motion  = p.motion   ? `<div class="sub">+ ${esc(p.motion)} motion</div>` : "";
+      const front   = p.front    ? `<div class="sub">front: ${esc(p.front)}</div>` : "";
+      const cov     = p.coverage ? `<div class="sub">cov: ${esc(p.coverage)}</div>` : "";
+      const pInfo   = [];
+      if (p.passer   && rosterMap[p.passer])   pInfo.push(`#${esc(rosterMap[p.passer].jersey)} ${esc(rosterMap[p.passer].name)}`);
+      if (p.receiver && rosterMap[p.receiver]) pInfo.push(`→ #${esc(rosterMap[p.receiver].jersey)} ${esc(rosterMap[p.receiver].name)}`);
+      if (p.rusher   && rosterMap[p.rusher])   pInfo.push(`#${esc(rosterMap[p.rusher].jersey)} ${esc(rosterMap[p.rusher].name)}`);
+      const playerNote = pInfo.length ? `<div class="sub player">${pInfo.join(" ")}</div>` : "";
+      const tags   = (p.tags || []).join(", ");
+      const note   = p.note ? esc(p.note) : "";
+      return `<tr class="${p.success ? "eff" : ""}">
+        <td class="num">${i + 1}</td>
+        <td>${ctx}</td>
+        <td class="num">${dn}</td>
+        <td>${ball}</td>
+        <td><span class="pill ${esc(p.type || "")}">${typeLbl}</span></td>
+        <td>${esc(p.form || "&mdash;")}${motion}${front}${cov}</td>
+        <td>${esc(p.call || "&mdash;")}${playerNote}</td>
+        <td class="num ${p.yards > 0 ? "pos" : p.yards < 0 ? "neg" : ""}">${sign}${p.yards}</td>
+        <td class="eff-cell">${p.success ? "✓" : "✗"}</td>
+        <td class="small">${esc(tags)}</td>
+        <td class="small">${note}</td>
       </tr>`;
     }).join("");
     const playLogHtml = plays.length
-      ? `<div class="play-log-head">Play by Play</div>
-         <table><thead><tr>
+      ? `<div class="section-head">Play by Play</div>
+         <div style="overflow-x:auto"><table><thead><tr>
            <th>#</th><th>Qtr/Ser</th><th>Dn &amp; Dist</th><th>Ball On</th>
-           <th>Type</th><th>Formation</th><th>Call</th><th>Tags</th><th>Yds</th><th>Eff</th>
-         </tr></thead><tbody>${playRows}</tbody></table>`
+           <th>Type</th><th>Formation</th><th>Call</th><th>Yds</th><th>Eff</th><th>Tags</th><th>Notes</th>
+         </tr></thead><tbody>${playRows}</tbody></table></div>`
       : "";
     const win = window.open("", "_blank");
     if (!win) return;
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${gameTitle}${gameDate ? " – " + gameDate : ""}</title><style>
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>${esc(docTitle)}</title><style>
       *{box-sizing:border-box;margin:0;padding:0}
-      body{font-family:Inter,Arial,sans-serif;font-size:14px;color:#0f1830;padding:24px;max-width:960px;margin:0 auto}
-      h1{font-family:Oswald,"Arial Narrow",sans-serif;font-size:22px;margin-bottom:4px;color:#16317f}
-      .pdf-sub{font-size:12px;color:#6b7280;margin-bottom:20px}
-      .rpt-row{padding:10px 0;border-bottom:1px solid #e5e7eb}
+      body{font-family:Inter,Arial,sans-serif;font-size:13px;color:#0f1830;padding:28px 32px;max-width:1020px;margin:0 auto}
+      /* ---- Header ---- */
+      .pdf-header{border-bottom:3px solid #16317f;padding-bottom:14px;margin-bottom:22px}
+      .pdf-team{font-family:Oswald,"Arial Narrow",sans-serif;font-size:28px;font-weight:700;color:#16317f;letter-spacing:.02em;line-height:1.1}
+      .pdf-meta{display:flex;gap:18px;margin-top:6px;font-size:12px;color:#6b7280;align-items:center;flex-wrap:wrap}
+      .pdf-meta span{display:flex;align-items:center;gap:4px}
+      .pdf-badge{background:#16317f;color:#fff;font-family:Oswald,"Arial Narrow",sans-serif;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:3px}
+      /* ---- Section headings ---- */
+      .section-head{font-family:Oswald,"Arial Narrow",sans-serif;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#16317f;padding:5px 0 5px;border-bottom:2px solid #16317f;margin:24px 0 10px}
+      /* ---- Summary stats (from reportBody) ---- */
+      .rpt-row{padding:9px 0;border-bottom:1px solid #e5e7eb}
       .rpt-row:last-child{border-bottom:none}
-      .rpt-label{font-size:14px;font-weight:600;color:#0f1830;margin-bottom:4px}
-      .rpt-stats{display:flex;gap:14px;font-size:12px;color:#6b7280;margin-bottom:6px}
+      .rpt-label{font-size:13px;font-weight:600;color:#0f1830;margin-bottom:3px}
+      .rpt-stats{display:flex;gap:14px;font-size:12px;color:#6b7280;margin-bottom:5px}
       .rpt-stats .rpt-eff{font-weight:700}
-      .rpt-bar-wrap{height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden}
+      .rpt-bar-wrap{height:5px;background:#e5e7eb;border-radius:3px;overflow:hidden}
       .rpt-bar{height:100%;background:#1e44c4;border-radius:3px}
-      .report-section-head{font-family:Oswald,"Arial Narrow",sans-serif;font-size:13px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:#6b7280;padding:14px 0 6px;border-bottom:2px solid #e5e7eb;margin-bottom:8px}
-      .report-empty{text-align:center;padding:40px 0;color:#6b7280;font-size:14px}
-      .drill-stats{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px}
-      .drill-stats span{font-size:14px;color:#6b7280}
-      .drill-stats b{font-family:Oswald,"Arial Narrow",sans-serif;color:#0f1830;font-size:17px;display:block}
-      .play-log-head{font-family:Oswald,"Arial Narrow",sans-serif;font-size:13px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:#6b7280;padding:14px 0 6px;border-bottom:2px solid #e5e7eb;margin:20px 0 8px}
-      table{width:100%;border-collapse:collapse;font-size:12px}
-      th{text-align:left;font-weight:600;padding:5px 6px;border-bottom:2px solid #e5e7eb;color:#6b7280;font-size:11px;text-transform:uppercase;white-space:nowrap}
-      td{padding:5px 6px;border-bottom:1px solid #f3f4f6}
-      @media print{body{padding:12px}.no-print{display:none}}
+      .report-section-head{font-family:Oswald,"Arial Narrow",sans-serif;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#16317f;padding:5px 0;border-bottom:2px solid #16317f;margin:22px 0 10px}
+      .report-empty{text-align:center;padding:30px 0;color:#9ca3af;font-size:13px}
+      .drill-stats{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px}
+      .drill-stats span{font-size:13px;color:#6b7280}
+      .drill-stats b{font-family:Oswald,"Arial Narrow",sans-serif;color:#0f1830;font-size:16px;display:block}
+      /* ---- Play log table ---- */
+      table{width:100%;border-collapse:collapse;font-size:11.5px}
+      thead tr{background:#f8f9fb}
+      th{text-align:left;font-weight:700;padding:6px 7px;border-bottom:2px solid #16317f;color:#16317f;font-size:10px;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+      td{padding:5px 7px;border-bottom:1px solid #f0f1f3;vertical-align:top}
+      tr.eff td{background:#f0fdf4}
+      td.num{font-family:Oswald,"Arial Narrow",sans-serif;font-weight:700;font-size:12px}
+      td.pos{color:#15803d;font-weight:700}
+      td.neg{color:#b91c1c;font-weight:700}
+      td.eff-cell{font-size:13px;font-weight:700;text-align:center}
+      tr.eff td.eff-cell{color:#15803d}
+      tr:not(.eff) td.eff-cell{color:#b91c1c}
+      td.small{font-size:11px;color:#6b7280}
+      .sub{font-size:10px;color:#9ca3af;margin-top:1px}
+      .sub.player{color:#1e44c4}
+      .pill{display:inline-block;font-family:Oswald,"Arial Narrow",sans-serif;font-size:9px;font-weight:700;letter-spacing:.06em;padding:1px 5px;border-radius:3px;text-transform:uppercase}
+      .pill.run{background:#fef3c7;color:#92400e}
+      .pill.pass{background:#eff6ff;color:#1e40af}
+      .pill.punt{background:#f3f4f6;color:#6b7280}
+      /* ---- Print / screen ---- */
+      .no-print{display:flex;gap:10px;margin-bottom:20px;align-items:center}
+      @media print{
+        body{padding:16px 20px}
+        .no-print{display:none}
+        tr.eff td{background:#f0fdf4 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        thead tr{background:#f8f9fb !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      }
     </style></head><body>
-      <div class="no-print" style="margin-bottom:16px;display:flex;align-items:center;gap:12px">
+      <div class="no-print">
         <button onclick="window.print()" style="font-family:Inter,sans-serif;font-size:13px;padding:6px 14px;background:#16317f;color:#fff;border:none;border-radius:6px;cursor:pointer">&#128438; Save PDF</button>
         <button onclick="window.close()" style="font-family:Inter,sans-serif;font-size:13px;padding:6px 14px;background:#f3f4f6;color:#0f1830;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer">&#x2190; Back to App</button>
       </div>
-      <h1>${gameTitle}</h1>${gameDate ? `<div class="pdf-sub">${gameDate}</div>` : ""}
+      <div class="pdf-header">
+        <div class="pdf-team">${esc(teamName)}</div>
+        <div class="pdf-meta">
+          ${opponent ? `<span>${esc(opponent)}</span>` : ""}
+          ${gameDate ? `<span>${esc(gameDate)}</span>` : ""}
+          ${gameMode ? `<span class="pdf-badge">${esc(gameMode)}</span>` : ""}
+          <span>${plays.length} plays</span>
+        </div>
+      </div>
+      <div class="section-head">Game Report</div>
       ${bodyHtml}
       ${playLogHtml}
     </body></html>`);
