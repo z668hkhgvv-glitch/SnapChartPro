@@ -6,7 +6,7 @@ import {
   inviteCoach, cancelInvite,
   updateMemberRole, removeMember,
   getPlays, getSeasons, archiveSeason,
-  updatePlay,
+  updatePlay, updateGame,
 } from "../db.js";
 import { renderGame, buildHeatMap, buildRedZone } from "./game.js";
 
@@ -1377,7 +1377,7 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
         return `<div class="sr-game-card">
           <div class="sr-game-top">
             <div>
-              <div class="sr-game-name">${gameName}</div>
+              <div style="display:flex;align-items:center;gap:6px"><span id="srname-${esc(g.id)}" class="sr-game-name">${gameName}</span><button class="btn-secondary sr-edit-btn" data-edit-game="${esc(g.id)}" title="Edit name" style="padding:2px 7px;font-size:14px;line-height:1;min-width:0;flex-shrink:0">&#9998;</button></div>
               <div class="sr-game-meta">${esc(g.date || "")}${g.date && g.mode ? " · " : ""}${esc(g.mode || "")}</div>
             </div>
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -1448,6 +1448,40 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
         document.getElementById("srDrillTitle").textContent = "Red Zone — " + gameName;
         document.getElementById("srDrillBody").innerHTML = buildRedZone(g.plays);
         document.getElementById("srDrillModal").hidden = false;
+      });
+    });
+
+    // Wire game name edit buttons
+    body.querySelectorAll(".sr-edit-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-edit-game");
+        const g = activeGames.find((g) => g.id === id);
+        if (!g) return;
+        const nameEl = document.getElementById("srname-" + id);
+        if (!nameEl) return;
+        const cur = g.opponent || "";
+        nameEl.outerHTML = `<span id="srname-${esc(id)}" style="display:inline-flex;align-items:center;gap:6px">
+          <input id="sredit-inp-${esc(id)}" type="text" value="${esc(cur)}"
+            style="font-family:var(--num);font-size:16px;font-weight:700;color:var(--ink);border:1.5px solid var(--royal);border-radius:6px;padding:2px 10px;width:220px;outline:none">
+          <button id="sredit-save-${esc(id)}" class="btn-primary" style="padding:3px 10px;font-size:13px">&#10003;</button>
+          <button id="sredit-cancel-${esc(id)}" class="btn-secondary" style="padding:3px 10px;font-size:13px">&#10005;</button>
+        </span>`;
+        const inp = document.getElementById("sredit-inp-" + id);
+        inp.focus(); inp.select();
+        const doSave = async () => {
+          const newVal = inp.value.trim();
+          g.opponent = newVal;
+          await updateGame(teamId, id, { opponent: newVal });
+          renderSeasonReview(container, user, teamId, userRole, onBack);
+        };
+        inp.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter") { ev.preventDefault(); doSave(); }
+          if (ev.key === "Escape") renderSeasonReview(container, user, teamId, userRole, onBack);
+        });
+        document.getElementById("sredit-save-" + id).addEventListener("click", doSave);
+        document.getElementById("sredit-cancel-" + id).addEventListener("click", () =>
+          renderSeasonReview(container, user, teamId, userRole, onBack)
+        );
       });
     });
 
