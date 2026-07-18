@@ -1749,11 +1749,31 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     const gameTitle = game.opponent ? "vs " + game.opponent : "Game Report";
     const gameDate  = game.date || "";
     const bodyHtml  = document.getElementById("reportBody").innerHTML;
+    const playRows  = plays.map((p, i) => {
+      const sign = p.yards > 0 ? "+" : "";
+      const ctx  = p.mode === "scrimmage" ? `Ser ${p.series || ""}` : `Q${p.qtr || ""}`;
+      const dn   = p.down ? `${p.down}&amp;${p.dist}` : "&mdash;";
+      const ball = p.yl != null && p.yl !== "" ? `${p.yl} ${p.hash || ""}` : "&mdash;";
+      const tags = (p.tags || []).join(", ");
+      return `<tr>
+        <td>${i + 1}</td><td>${ctx}</td><td>${dn}</td><td>${ball}</td>
+        <td>${p.type || "&mdash;"}</td><td>${esc(p.form || "")}</td>
+        <td>${esc(p.call || "")}</td><td>${esc(tags)}</td>
+        <td>${sign}${p.yards}</td><td>${p.success ? "✓" : "✗"}</td>
+      </tr>`;
+    }).join("");
+    const playLogHtml = plays.length
+      ? `<div class="play-log-head">Play by Play</div>
+         <table><thead><tr>
+           <th>#</th><th>Qtr/Ser</th><th>Dn &amp; Dist</th><th>Ball On</th>
+           <th>Type</th><th>Formation</th><th>Call</th><th>Tags</th><th>Yds</th><th>Eff</th>
+         </tr></thead><tbody>${playRows}</tbody></table>`
+      : "";
     const win = window.open("", "_blank");
     if (!win) return;
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${gameTitle}${gameDate ? " – " + gameDate : ""}</title><style>
       *{box-sizing:border-box;margin:0;padding:0}
-      body{font-family:Inter,Arial,sans-serif;font-size:14px;color:#0f1830;padding:24px;max-width:860px;margin:0 auto}
+      body{font-family:Inter,Arial,sans-serif;font-size:14px;color:#0f1830;padding:24px;max-width:960px;margin:0 auto}
       h1{font-family:Oswald,"Arial Narrow",sans-serif;font-size:22px;margin-bottom:4px;color:#16317f}
       .pdf-sub{font-size:12px;color:#6b7280;margin-bottom:20px}
       .rpt-row{padding:10px 0;border-bottom:1px solid #e5e7eb}
@@ -1768,13 +1788,15 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       .drill-stats{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px}
       .drill-stats span{font-size:14px;color:#6b7280}
       .drill-stats b{font-family:Oswald,"Arial Narrow",sans-serif;color:#0f1830;font-size:17px;display:block}
-      table{width:100%;border-collapse:collapse;font-size:13px}
-      th{text-align:left;font-weight:600;padding:6px 8px;border-bottom:2px solid #e5e7eb;color:#6b7280;font-size:11px;text-transform:uppercase}
-      td{padding:6px 8px;border-bottom:1px solid #f3f4f6}
+      .play-log-head{font-family:Oswald,"Arial Narrow",sans-serif;font-size:13px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:#6b7280;padding:14px 0 6px;border-bottom:2px solid #e5e7eb;margin:20px 0 8px}
+      table{width:100%;border-collapse:collapse;font-size:12px}
+      th{text-align:left;font-weight:600;padding:5px 6px;border-bottom:2px solid #e5e7eb;color:#6b7280;font-size:11px;text-transform:uppercase;white-space:nowrap}
+      td{padding:5px 6px;border-bottom:1px solid #f3f4f6}
       @media print{body{padding:12px}}
     </style></head><body>
       <h1>${gameTitle}</h1>${gameDate ? `<div class="pdf-sub">${gameDate}</div>` : ""}
       ${bodyHtml}
+      ${playLogHtml}
     </body></html>`);
     win.document.close();
     setTimeout(() => { win.print(); }, 400);
