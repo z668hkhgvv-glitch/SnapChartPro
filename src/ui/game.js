@@ -1354,9 +1354,9 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       success:  draft.effective,
       auto:     !draft.effTouched,
       note:     draft.note,
-      passer:   teamSettings.trackPlayers ? (document.getElementById("fPasser")?.value  || "") : "",
-      receiver: teamSettings.trackPlayers ? (document.getElementById("fReceiver")?.value || "") : "",
-      rusher:   teamSettings.trackPlayers ? (document.getElementById("fRusher")?.value  || "") : "",
+      passer:   (teamSettings.trackPlayers && draft.type === "pass") ? (document.getElementById("fPasser")?.value  || "") : "",
+      receiver: (teamSettings.trackPlayers && draft.type === "pass") ? (document.getElementById("fReceiver")?.value || "") : "",
+      rusher:   (teamSettings.trackPlayers && draft.type === "run")  ? (document.getElementById("fRusher")?.value  || "") : "",
     };
     if (playData.passer)   lastPasser   = playData.passer;
     if (playData.receiver) lastReceiver = playData.receiver;
