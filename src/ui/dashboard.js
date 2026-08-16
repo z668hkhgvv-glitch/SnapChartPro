@@ -10,6 +10,7 @@
 import { logoutCoach } from "../auth.js";
 import { getGames, createGame } from "../db.js";
 import { renderGame } from "./game.js";
+import { renderSettings } from "./settings.js";
 
 export async function renderDashboard(container, user, teamId, gameToOpen) {
   container.innerHTML = `

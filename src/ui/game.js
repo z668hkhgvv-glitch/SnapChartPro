@@ -13,9 +13,10 @@ import {
   subscribePlays,
   updateGame,
 } from "../db.js";
+import { loadSettings } from "./settings.js";
 
-// Formation defaults (same as free app)
-const DEFAULT_FORMS = [
+// Formation defaults — supplemented by persisted settings at render time
+const BUILTIN_FORMS = [
   "Shotgun","Singleback","I-Form","Pistol","Empty",
   "Trips Right","Trips Left","Goal Line","Wildcat",
 ];
@@ -117,10 +118,7 @@ export function renderGame(container, user, teamId, game, onBack) {
   const is7   = mode === "7v7";
   const isScrim = mode === "scrimmage";
 
-  const settings = {
-    effStd1: 5, effStd2: 50, effStd3: 100, effStd4: 100,
-    effScrim: 5, defaultDist: 10, scrimmPlays: 10,
-  };
+  const settings = loadSettings();
 
   // Draft holds the in-progress form values that are NOT simple text inputs.
   const draft = {
