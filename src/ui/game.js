@@ -52,7 +52,7 @@ function dnDist(p) {
 }
 
 function autoEffective(mode, down, dist, yards, settings) {
-  if (mode === "7v7")       return autoEff7v7(down, dist, yards, settings.eff7v7Mode);
+  if (mode === "7v7")       return autoEff7v7(down, dist, yards, settings.eff7v7Mode, settings.playsPerSeries7v7);
   if (mode === "scrimmage") return (Number(yards) || 0) >= (settings.effScrim || 5);
   dist  = Number(dist)  || 0;
   yards = Number(yards) || 0;
@@ -65,15 +65,15 @@ function autoEffective(mode, down, dist, yards, settings) {
   return false;
 }
 
-function autoEff7v7(down, toGo, yards, eff7v7Mode) {
+function autoEff7v7(down, toGo, yards, eff7v7Mode, playsPerSeries) {
   toGo  = Number(toGo)  || 0;
   yards = Number(yards) || 0;
   down  = Number(down)  || 1;
   if (toGo <= 0) return yards >= 0;
   if (yards >= toGo) return true;
-  // "pace" mode: any positive gain is effective; "strict" mode: must advance past current line marker
-  if ((eff7v7Mode || "pace") === "pace") return yards > 0;
-  const remaining = Math.max(1, 5 - down);
+  // "strict" mode: must reach the line; "pace" mode: on-track proportionally
+  if ((eff7v7Mode || "pace") === "strict") return false;
+  const remaining = Math.max(1, (playsPerSeries || 4) - down + 1);
   return yards >= toGo / remaining;
 }
 
@@ -354,7 +354,7 @@ export function buildHeatMap(playsArr, filterType) {
 
 // ---------- file export helpers -----------------------------------------------
 
-function downloadFile(filename, content, mime) {
+export function downloadFile(filename, content, mime) {
   const blob = new Blob([content], { type: mime });
   const url  = URL.createObjectURL(blob);
   const a    = Object.assign(document.createElement("a"), { href: url, download: filename });
@@ -362,11 +362,11 @@ function downloadFile(filename, content, mime) {
   URL.revokeObjectURL(url);
 }
 
-function csvRow(vals) {
+export function csvRow(vals) {
   return vals.map((v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`).join(",");
 }
 
-function exportCSV(plays, game, teamSettings) {
+export function exportCSV(plays, game, teamSettings) {
   const rosterMap = {};
   ((teamSettings && teamSettings.roster) || []).forEach(p => rosterMap[p.id] = `#${p.jersey} ${p.name}`);
   const head = csvRow(["#","Qtr","Down","Dist","Ball On","Hash","Type","Formation","Play Call","Motion","Front","Coverage","Yards","Effective","Tags","Note","Passer","Receiver","Rusher"]);
@@ -380,12 +380,12 @@ function exportCSV(plays, game, teamSettings) {
   downloadFile(`${title}_${game.date || "chart"}.csv`, [head, ...rows].join("\n"), "text/csv");
 }
 
-function exportHudl(plays, game, teamSettings) {
+export function exportHudl(plays, game, teamSettings) {
   const rosterMap = {};
   ((teamSettings && teamSettings.roster) || []).forEach(p => rosterMap[p.id] = `#${p.jersey} ${p.name}`);
-  const head = csvRow(["Play #","Down","Distance","Yardline","Hash","Play Type","Formation","Play Call","Motion","Defensive Front","Coverage","Yards Gained","Effective","Tags","Notes","Passer","Receiver","Rusher"]);
+  const head = csvRow(["Play #","Down","Distance","Yardline","Hash","Team Side","Play Type","Formation","Play Call","Motion","Defensive Front","Coverage","Yards Gained","Effective","Tags","Notes","Passer","Receiver","Rusher"]);
   const rows = plays.map((p, i) => csvRow([
-    i + 1, p.down || "", p.dist || "", p.yl || "", p.hash, p.type,
+    i + 1, p.down || "", p.dist || "", p.yl || "", p.hash, "O", p.type,
     p.form || "", p.call || "", p.motion || "", p.front || "", p.coverage || "",
     p.yards, p.success ? "Y" : "N", (p.tags || []).join("|"), p.note || "",
     rosterMap[p.passer] || "", rosterMap[p.receiver] || "", rosterMap[p.rusher] || "",
@@ -468,6 +468,15 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   };
 
   container.innerHTML = buildHTML(game, mode);
+
+  // Populate result chips from team settings (or defaults)
+  const DEFAULT_RESULT_TAGS = ["1st Down", "TD", "Incomplete", "Sack", "Penalty", "Turnover"];
+  const resultTags = (teamSettings.tags && teamSettings.tags.length)
+    ? teamSettings.tags
+    : DEFAULT_RESULT_TAGS;
+  document.getElementById("tags").innerHTML = resultTags
+    .map(t => `<button class="chip" data-v="${esc(t)}">${esc(t)}</button>`)
+    .join("");
 
   // Readonly users: hide entry form, mark table as non-interactive
   if (!canChart) {
@@ -1215,18 +1224,76 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       }
     }
 
+    // By tags (custom field)
+    const tagsMap = {};
+    plays.forEach(p => {
+      const k = (p.tags || "").trim();
+      if (!k) return;
+      if (!tagsMap[k]) tagsMap[k] = { n: 0, yds: 0, eff: 0 };
+      tagsMap[k].n++;
+      tagsMap[k].yds += Number(p.yards) || 0;
+      if (p.success) tagsMap[k].eff++;
+    });
+    const tagKeys = Object.keys(tagsMap).filter(k => tagsMap[k].n >= 1).sort();
+    if (tagKeys.length) {
+      html += secHead("By Tag");
+      html += tagKeys.map(k => {
+        const s = tagsMap[k];
+        const rate = Math.round(100 * s.eff / s.n);
+        const avg  = (s.yds / s.n).toFixed(1);
+        return `<div class="rpt-row">
+          <div class="rpt-label">${esc2(k)}</div>
+          <div class="rpt-stats">
+            <span class="rpt-n">${s.n} plays</span>
+            <span class="rpt-avg">${avg} yds</span>
+            <span class="rpt-eff" style="color:${rate >= 50 ? "#15803d" : "#b91c1c"}">${rate}% eff</span>
+          </div>
+          <div class="rpt-bar-wrap"><div class="rpt-bar" style="width:${rate}%"></div></div>
+        </div>`;
+      }).join("");
+    }
+
+    // By backfield
+    const bfMap = {};
+    plays.forEach(p => {
+      const k = (p.backfield || "").trim();
+      if (!k) return;
+      if (!bfMap[k]) bfMap[k] = { n: 0, yds: 0, eff: 0 };
+      bfMap[k].n++;
+      bfMap[k].yds += Number(p.yards) || 0;
+      if (p.success) bfMap[k].eff++;
+    });
+    const bfKeys = Object.keys(bfMap).filter(k => bfMap[k].n >= 1).sort();
+    if (bfKeys.length) {
+      html += secHead("By Backfield");
+      html += bfKeys.map(k => {
+        const s = bfMap[k];
+        const rate = Math.round(100 * s.eff / s.n);
+        const avg  = (s.yds / s.n).toFixed(1);
+        return `<div class="rpt-row">
+          <div class="rpt-label">${esc2(k)}</div>
+          <div class="rpt-stats">
+            <span class="rpt-n">${s.n} plays</span>
+            <span class="rpt-avg">${avg} yds</span>
+            <span class="rpt-eff" style="color:${rate >= 50 ? "#15803d" : "#b91c1c"}">${rate}% eff</span>
+          </div>
+          <div class="rpt-bar-wrap"><div class="rpt-bar" style="width:${rate}%"></div></div>
+        </div>`;
+      }).join("");
+    }
+
     return html + "</div>";
   }
 
   // ---- autocomplete dropdowns ----
-  const AC_IDS = ["formDrop","callDrop","motionDrop","frontDrop","coverageDrop"];
+  const AC_IDS = ["formDrop","callDrop","tagsDrop","backfieldDrop","motionDrop","frontDrop","coverageDrop"];
   function closeAllAC() {
     AC_IDS.forEach((id) => {
       const d = document.getElementById(id);
       if (d) { d.hidden = true; d.innerHTML = ""; }
     });
   }
-  const LIB_FIELD_MAP = { form:"forms", call:"calls", motion:"motions", front:"fronts", coverage:"coverages" };
+  const LIB_FIELD_MAP = { form:"forms", call:"calls", tags:"tags", backfield:"backfields", motion:"motions", front:"fronts", coverage:"coverages" };
   function getACList(key) {
     const fromPlays = plays.map((p) => p[key] || "");
     const defaults  = key === "form" ? DEFAULT_FORMS : [];
@@ -1277,7 +1344,9 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     });
   }
   bindAC("form",     "formDrop",     "form");
-  bindAC("call",     "callDrop",     "call");
+  bindAC("call",      "callDrop",      "call");
+  bindAC("tags",      "tagsDrop",      "tags");
+  bindAC("backfield", "backfieldDrop", "backfield");
   bindAC("motion",   "motionDrop",   "motion");
   bindAC("front",    "frontDrop",    "front");
   bindAC("coverage", "coverageDrop", "coverage");
@@ -1300,10 +1369,12 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     document.querySelector(".entry").classList.remove("editing");
     document.querySelector(".entry h2").textContent = "Log a play";
     document.getElementById("yards").value = "";
-    document.getElementById("call").value = "";
-    document.getElementById("form").value = "";
-    document.getElementById("front").value = "";
-    document.getElementById("coverage").value = "";
+    document.getElementById("call").value      = "";
+    document.getElementById("tags").value      = "";
+    document.getElementById("backfield").value = "";
+    document.getElementById("form").value      = "";
+    document.getElementById("front").value     = "";
+    document.getElementById("coverage").value  = "";
     draft.tags = [];
     Array.from(document.querySelectorAll("#tags .chip")).forEach((c) => c.classList.remove("on"));
     draft.effTouched = false;
@@ -1335,10 +1406,12 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     const dist  = document.getElementById("dist").value;
     const yards = getYards();
     const form     = titleCase(document.getElementById("form").value.trim());
-    const call     = titleCase(document.getElementById("call").value.trim());
-    const motion   = draft.motionOn ? titleCase(document.getElementById("motion").value.trim()) : "";
-    const front    = is7 ? "" : titleCase(document.getElementById("front").value.trim());
-    const coverage = titleCase(document.getElementById("coverage").value.trim());
+    const call      = titleCase(document.getElementById("call").value.trim());
+    const tags2     = titleCase(document.getElementById("tags").value.trim());
+    const backfield = titleCase(document.getElementById("backfield").value.trim());
+    const motion    = draft.motionOn ? titleCase(document.getElementById("motion").value.trim()) : "";
+    const front     = is7 ? "" : titleCase(document.getElementById("front").value.trim());
+    const coverage  = titleCase(document.getElementById("coverage").value.trim());
     const sp = settings.effScrimPlays || 10;
 
     const playData = {
@@ -1349,7 +1422,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       yl:       getYL(),
       hash:     draft.hash,
       type:     draft.type,
-      form, call, motion, front, coverage, yards,
+      form, call, tags: tags2, backfield, motion, front, coverage, yards,
       tags:     draft.tags.slice(),
       success:  draft.effective,
       auto:     !draft.effTouched,
@@ -1483,7 +1556,9 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     const ylNum = Number(p.yl); draft.ylSign = ylNum < 0 ? -1 : 1; paintYlSign();
     document.getElementById("yl").value = Math.abs(ylNum) || "";
     document.getElementById("form").value = p.form || "";
-    document.getElementById("call").value = p.call || "";
+    document.getElementById("call").value      = p.call      || "";
+    document.getElementById("tags").value      = p.tags      || "";
+    document.getElementById("backfield").value = p.backfield || "";
     document.getElementById("yards").value = Math.abs(p.yards);
     draft.yardSign = Number(p.yards) < 0 ? -1 : 1; paintYardSign();
     draft.motionOn = !!p.motion;
@@ -1658,6 +1733,16 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     document.getElementById("respotModal").hidden = true;
   });
   document.getElementById("respotSkip").addEventListener("click", () => {
+    document.getElementById("respotModal").hidden = true;
+  });
+  document.getElementById("respotReturn").addEventListener("click", () => {
+    if (is7) {
+      document.getElementById("yl").value = settings.start7v7;
+      draft.ylSign = 1; paintYlSign();
+    } else if (isScrim && scrimmStartYl) {
+      document.getElementById("yl").value = scrimmStartYl;
+      draft.ylSign = scrimmStartSign; paintYlSign();
+    }
     document.getElementById("respotModal").hidden = true;
   });
 
@@ -2493,6 +2578,16 @@ function buildHTML(game, mode) {
           <div class="ac-drop" id="callDrop" hidden></div>
           <button type="button" class="btn-secondary" id="suggestBtn" style="width:100%;margin-top:4px;font-size:13px;height:36px">&#9889; Suggest Play</button>
         </div>
+        <div class="fld grow"><label>Tags</label>
+          <input id="tags" type="text" autocomplete="off" autocapitalize="words"
+                 placeholder="Start typing &mdash; past entries appear">
+          <div class="ac-drop" id="tagsDrop" hidden></div>
+        </div>
+        <div class="fld grow"><label>Backfield</label>
+          <input id="backfield" type="text" autocomplete="off" autocapitalize="words"
+                 placeholder="Start typing &mdash; past entries appear">
+          <div class="ac-drop" id="backfieldDrop" hidden></div>
+        </div>
       </div>
 
       <div class="row">
@@ -2558,14 +2653,7 @@ function buildHTML(game, mode) {
           </button>
         </div>
         <div class="fld grow"><label>Result (tap any)</label>
-          <div class="chips" id="tags">
-            <button class="chip" data-v="1st Down">1st Down</button>
-            <button class="chip" data-v="TD">TD</button>
-            <button class="chip" data-v="Incomplete">Incomplete</button>
-            <button class="chip" data-v="Sack">Sack</button>
-            <button class="chip" data-v="Penalty">Penalty</button>
-            <button class="chip" data-v="Turnover">Turnover</button>
-          </div>
+          <div class="chips" id="tags"></div>
         </div>
       </div>
 
@@ -2664,10 +2752,11 @@ function buildHTML(game, mode) {
       <h2 style="margin-bottom:8px">After the TD</h2>
       <p style="font-size:14px;color:var(--slate);margin-bottom:16px">Where does the next drive start? (ball-on yard line)</p>
       <input id="respotInput" type="number" class="field" style="width:100%;text-align:center;font-size:24px;height:52px;margin-bottom:16px" placeholder="25" min="1" max="99">
-      <div style="display:flex;gap:10px">
+      <div style="display:flex;gap:10px;margin-bottom:8px">
         <button class="btn-secondary" id="respotSkip" style="flex:1">Skip</button>
         <button class="btn-primary" id="respotSet" style="flex:1">Set</button>
       </div>
+      <button class="btn-ghost" id="respotReturn" style="width:100%;font-size:13px">&#8617; Return to starting yard line</button>
     </div>
   </div>
 
