@@ -369,11 +369,11 @@ export function csvRow(vals) {
 export function exportCSV(plays, game, teamSettings) {
   const rosterMap = {};
   ((teamSettings && teamSettings.roster) || []).forEach(p => rosterMap[p.id] = `#${p.jersey} ${p.name}`);
-  const head = csvRow(["#","Qtr","Down","Dist","Ball On","Hash","Type","Formation","Play Call","Motion","Front","Coverage","Yards","Effective","Tags","Note","Passer","Receiver","Rusher"]);
+  const head = csvRow(["#","Qtr","Down","Dist","Ball On","Hash","Type","Formation","Play Call","Tags","Backfield","Motion","Front","Coverage","Yards","Effective","Result Tags","Note","Passer","Receiver","Rusher"]);
   const rows = plays.map((p, i) => csvRow([
     i + 1, p.qtr, p.down, p.dist, p.yl, p.hash, p.type,
-    p.form, p.call, p.motion, p.front, p.coverage, p.yards,
-    p.success ? "Y" : "N", (p.tags || []).join("|"), p.note || "",
+    p.form, p.call, p.label || "", p.backfield || "", p.motion, p.front, p.coverage, p.yards,
+    p.success ? "Y" : "N", (Array.isArray(p.tags) ? p.tags : []).join("|"), p.note || "",
     rosterMap[p.passer] || "", rosterMap[p.receiver] || "", rosterMap[p.rusher] || "",
   ]));
   const title = (game.opponent ? "vs_" + game.opponent : "Game").replace(/\s+/g, "_");
@@ -383,11 +383,11 @@ export function exportCSV(plays, game, teamSettings) {
 export function exportHudl(plays, game, teamSettings) {
   const rosterMap = {};
   ((teamSettings && teamSettings.roster) || []).forEach(p => rosterMap[p.id] = `#${p.jersey} ${p.name}`);
-  const head = csvRow(["Play #","Down","Distance","Yardline","Hash","Team Side","Play Type","Formation","Play Call","Motion","Defensive Front","Coverage","Yards Gained","Effective","Tags","Notes","Passer","Receiver","Rusher"]);
+  const head = csvRow(["Play #","Down","Distance","Yardline","Hash","Team Side","Play Type","Formation","Play Call","Tags","Backfield","Motion","Defensive Front","Coverage","Yards Gained","Effective","Result Tags","Notes","Passer","Receiver","Rusher"]);
   const rows = plays.map((p, i) => csvRow([
     i + 1, p.down || "", p.dist || "", p.yl || "", p.hash, "O", p.type,
-    p.form || "", p.call || "", p.motion || "", p.front || "", p.coverage || "",
-    p.yards, p.success ? "Y" : "N", (p.tags || []).join("|"), p.note || "",
+    p.form || "", p.call || "", p.label || "", p.backfield || "", p.motion || "", p.front || "", p.coverage || "",
+    p.yards, p.success ? "Y" : "N", (Array.isArray(p.tags) ? p.tags : []).join("|"), p.note || "",
     rosterMap[p.passer] || "", rosterMap[p.receiver] || "", rosterMap[p.rusher] || "",
   ]));
   const title = (game.opponent ? "vs_" + game.opponent : "Game").replace(/\s+/g, "_");
@@ -1227,7 +1227,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     // By tags (custom field)
     const tagsMap = {};
     plays.forEach(p => {
-      const k = (p.tags || "").trim();
+      const k = (p.label || "").trim();
       if (!k) return;
       if (!tagsMap[k]) tagsMap[k] = { n: 0, yds: 0, eff: 0 };
       tagsMap[k].n++;
@@ -1286,14 +1286,14 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   }
 
   // ---- autocomplete dropdowns ----
-  const AC_IDS = ["formDrop","callDrop","tagsDrop","backfieldDrop","motionDrop","frontDrop","coverageDrop"];
+  const AC_IDS = ["formDrop","callDrop","playLabelDrop","backfieldDrop","motionDrop","frontDrop","coverageDrop"];
   function closeAllAC() {
     AC_IDS.forEach((id) => {
       const d = document.getElementById(id);
       if (d) { d.hidden = true; d.innerHTML = ""; }
     });
   }
-  const LIB_FIELD_MAP = { form:"forms", call:"calls", tags:"tags", backfield:"backfields", motion:"motions", front:"fronts", coverage:"coverages" };
+  const LIB_FIELD_MAP = { form:"forms", call:"calls", label:"labels", backfield:"backfields", motion:"motions", front:"fronts", coverage:"coverages" };
   function getACList(key) {
     const fromPlays = plays.map((p) => p[key] || "");
     const defaults  = key === "form" ? DEFAULT_FORMS : [];
@@ -1345,7 +1345,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   }
   bindAC("form",     "formDrop",     "form");
   bindAC("call",      "callDrop",      "call");
-  bindAC("tags",      "tagsDrop",      "tags");
+  bindAC("playLabelFld", "playLabelDrop", "label");
   bindAC("backfield", "backfieldDrop", "backfield");
   bindAC("motion",   "motionDrop",   "motion");
   bindAC("front",    "frontDrop",    "front");
@@ -1370,7 +1370,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     document.querySelector(".entry h2").textContent = "Log a play";
     document.getElementById("yards").value = "";
     document.getElementById("call").value      = "";
-    document.getElementById("tags").value      = "";
+    document.getElementById("playLabelFld").value = "";
     document.getElementById("backfield").value = "";
     document.getElementById("form").value      = "";
     document.getElementById("front").value     = "";
@@ -1407,7 +1407,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     const yards = getYards();
     const form     = titleCase(document.getElementById("form").value.trim());
     const call      = titleCase(document.getElementById("call").value.trim());
-    const tags2     = titleCase(document.getElementById("tags").value.trim());
+    const label     = titleCase(document.getElementById("playLabelFld").value.trim());
     const backfield = titleCase(document.getElementById("backfield").value.trim());
     const motion    = draft.motionOn ? titleCase(document.getElementById("motion").value.trim()) : "";
     const front     = is7 ? "" : titleCase(document.getElementById("front").value.trim());
@@ -1422,7 +1422,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       yl:       getYL(),
       hash:     draft.hash,
       type:     draft.type,
-      form, call, tags: tags2, backfield, motion, front, coverage, yards,
+      form, call, label, backfield, motion, front, coverage, yards,
       tags:     draft.tags.slice(),
       success:  draft.effective,
       auto:     !draft.effTouched,
@@ -1557,7 +1557,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     document.getElementById("yl").value = Math.abs(ylNum) || "";
     document.getElementById("form").value = p.form || "";
     document.getElementById("call").value      = p.call      || "";
-    document.getElementById("tags").value      = p.tags      || "";
+    document.getElementById("playLabelFld").value = p.label || "";
     document.getElementById("backfield").value = p.backfield || "";
     document.getElementById("yards").value = Math.abs(p.yards);
     draft.yardSign = Number(p.yards) < 0 ? -1 : 1; paintYardSign();
@@ -2579,9 +2579,9 @@ function buildHTML(game, mode) {
           <button type="button" class="btn-secondary" id="suggestBtn" style="width:100%;margin-top:4px;font-size:13px;height:36px">&#9889; Suggest Play</button>
         </div>
         <div class="fld grow"><label>Tags</label>
-          <input id="tags" type="text" autocomplete="off" autocapitalize="words"
+          <input id="playLabelFld" type="text" autocomplete="off" autocapitalize="words"
                  placeholder="Start typing &mdash; past entries appear">
-          <div class="ac-drop" id="tagsDrop" hidden></div>
+          <div class="ac-drop" id="playLabelDrop" hidden></div>
         </div>
         <div class="fld grow"><label>Backfield</label>
           <input id="backfield" type="text" autocomplete="off" autocapitalize="words"
