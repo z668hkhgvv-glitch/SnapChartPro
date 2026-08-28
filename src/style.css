@@ -352,6 +352,13 @@ html, body {
   border-radius: 12px; border: 2px solid var(--chalk); background: #fff;
   color: var(--slate); cursor: pointer;
 }
+.puntbtn {
+  font-family: var(--num); font-size: 18px; font-weight: 700;
+  letter-spacing: .05em; text-transform: uppercase;
+  background: #92400e; color: #fff; border: none; border-radius: 12px;
+  height: 54px; padding: 0 22px; cursor: pointer; flex: none;
+}
+.puntbtn:active { background: #78350f; }
 
 /* Play log */
 .log-head {

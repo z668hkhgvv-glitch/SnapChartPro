@@ -410,8 +410,6 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   let timedIntervalId = null;
   let timedRunning    = false;
   let timedRemaining  = 0;
-  // Change 4 — TD re-spot state
-  let isTouchdown = false;
   let hmFilter = "";
 
   // Role gates
@@ -507,8 +505,8 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   }
   wireSeg("qtr",   "qtr");
   wireSeg("hash",  "hash");
-  wireSeg("ptype", "type", () => { updatePlayerFieldVisibility(draft.type); });
-  wireSeg("down",  "down", () => { refreshAutoEff(); update7v7Hint(); });
+  wireSeg("ptype", "type", () => { updatePlayerFieldVisibility(draft.type); paintPuntBtn(); });
+  wireSeg("down",  "down", () => { refreshAutoEff(); update7v7Hint(); paintPuntBtn(); });
 
   // ---- effective checkbox ----
   const effBtn = document.getElementById("effBtn");
@@ -523,19 +521,30 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     document.getElementById("effHint").textContent = "Set by you for this play";
   });
 
-  // Change 4 — TD toggle button
-  const tdBtn = document.getElementById("tdBtn");
-  function paintTdBtn() {
-    tdBtn.style.background = isTouchdown ? "#15803d" : "#fff";
-    tdBtn.style.color      = isTouchdown ? "#fff"    : "var(--ink)";
-    tdBtn.style.border     = isTouchdown ? "1.5px solid #15803d" : "1.5px solid #E2E8F0";
-    tdBtn.setAttribute("aria-pressed", isTouchdown ? "true" : "false");
+  // ---- punt button (4th down, standard mode only) ----
+  function paintPuntBtn() {
+    const btn = document.getElementById("puntBtn");
+    if (!btn) return;
+    btn.hidden = !(mode === "standard" && draft.down === "4" && !editingId);
   }
-  tdBtn.addEventListener("click", () => {
-    isTouchdown = !isTouchdown;
-    paintTdBtn();
+  document.getElementById("puntBtn").addEventListener("click", async () => {
+    const playData = {
+      id: Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+      qtr: draft.qtr, down: "4", dist: document.getElementById("dist").value,
+      yl: getYL(), hash: draft.hash, type: "punt",
+      form: "", call: "", label: "", backfield: "", motion: "", front: "", coverage: "",
+      yards: 0, tags: [], success: false, auto: true, note: "",
+      passer: "", receiver: "", rusher: ""
+    };
+    try {
+      await dbAddPlay(teamId, game.id, playData);
+    } catch (err) { alert("Could not save punt: " + err.message); return; }
+    draft.down = "1"; setSeg("down", "1");
+    document.getElementById("dist").value = settings.defaultDist;
+    paintPuntBtn();
+    finishEntry(true);
   });
-  paintTdBtn();
+
   function refreshAutoEff() {
     if (draft.effTouched) return;
     draft.effective = autoEffective(
@@ -1387,8 +1396,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     paintYardSign();
     draft.note = "";
     paintNote();
-    isTouchdown = false;
-    paintTdBtn();
+    paintPuntBtn();
     if (document.getElementById("fPasser"))   document.getElementById("fPasser").value   = lastPasser;
     if (document.getElementById("fReceiver")) document.getElementById("fReceiver").value = lastReceiver;
     if (document.getElementById("fRusher"))   document.getElementById("fRusher").value   = lastRusher;
@@ -1474,7 +1482,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
           return;
         }
 
-        const wasTouchdown = isTouchdown; // capture before finishEntry resets it
+        const wasTouchdown = playData.tags.indexOf("TD") > -1;
         await dbAddPlay(teamId, game.id, playData);
         finishEntry(true);
 
@@ -2564,7 +2572,6 @@ function buildHTML(game, mode) {
           <div class="seg type" id="ptype">
             <button data-v="run" class="on">Run</button>
             <button data-v="pass">Pass</button>
-            <button data-v="punt">Punt</button>
           </div>
         </div>
         <div class="fld grow"><label>Formation</label>
@@ -2576,7 +2583,6 @@ function buildHTML(game, mode) {
           <input id="call" type="text" autocomplete="off" autocapitalize="words"
                  placeholder="Start typing &mdash; past entries appear">
           <div class="ac-drop" id="callDrop" hidden></div>
-          <button type="button" class="btn-secondary" id="suggestBtn" style="width:100%;margin-top:4px;font-size:13px;height:36px">&#9889; Suggest Play</button>
         </div>
         <div class="fld grow"><label>Tags</label>
           <input id="playLabelFld" type="text" autocomplete="off" autocapitalize="words"
@@ -2603,17 +2609,20 @@ function buildHTML(game, mode) {
         </div>
       </div>
 
-      <div class="form-row" id="passerRow" style="display:none">
-        <label class="form-label">Passer</label>
-        <select id="fPasser" class="field sel-half"><option value="">— select —</option></select>
+      <div class="row" id="passerRow" style="display:none">
+        <div class="fld grow"><label>Passer</label>
+          <select id="fPasser" class="field" style="height:46px;font-size:15px"><option value="">— select —</option></select>
+        </div>
       </div>
-      <div class="form-row" id="receiverRow" style="display:none">
-        <label class="form-label">Receiver</label>
-        <select id="fReceiver" class="field sel-half"><option value="">— select —</option></select>
+      <div class="row" id="receiverRow" style="display:none">
+        <div class="fld grow"><label>Receiver</label>
+          <select id="fReceiver" class="field" style="height:46px;font-size:15px"><option value="">— select —</option></select>
+        </div>
       </div>
-      <div class="form-row" id="rusherRow" style="display:none">
-        <label class="form-label">Rusher</label>
-        <select id="fRusher" class="field sel-half"><option value="">— select —</option></select>
+      <div class="row" id="rusherRow" style="display:none">
+        <div class="fld grow"><label>Rusher</label>
+          <select id="fRusher" class="field" style="height:46px;font-size:15px"><option value="">— select —</option></select>
+        </div>
       </div>
 
       <div class="row">
@@ -2647,11 +2656,6 @@ function buildHTML(game, mode) {
           </button>
           <div class="hint" id="effHint">Auto-checked when the play gains enough</div>
         </div>
-        <div class="fld"><label>Touchdown?</label>
-          <button id="tdBtn" class="eff" type="button" aria-pressed="false" style="background:#fff;border:1.5px solid #E2E8F0;color:var(--ink)">
-            <span class="box">&#127944;</span> TD
-          </button>
-        </div>
         <div class="fld grow"><label>Result (tap any)</label>
           <div class="chips" id="tags"></div>
         </div>
@@ -2660,6 +2664,8 @@ function buildHTML(game, mode) {
       <div class="row">
         <button class="add" id="addBtn">+ Add Play</button>
         <button class="note-btn" id="noteBtn" type="button">&#128221; <span id="noteBtnLabel">Add Note</span></button>
+        <button class="btn-secondary" id="suggestBtn" type="button" style="font-size:13px;height:36px;padding:0 14px">&#9889; Suggest Play</button>
+        <button class="puntbtn" id="puntBtn" type="button" hidden>&#8593; Punt</button>
         <button class="cancel" id="cancelEdit" type="button" hidden>Cancel</button>
       </div>
     </section>

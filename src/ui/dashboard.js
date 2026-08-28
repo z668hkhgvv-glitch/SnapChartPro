@@ -5,10 +5,10 @@ import {
   getMembers, getTeamInvites,
   inviteCoach, cancelInvite,
   updateMemberRole, removeMember,
-  getPlays, getSeasons, archiveSeason,
+  getPlays, getSeasons, archiveSeason, deleteSeason,
   updatePlay, updateGame,
 } from "../db.js";
-import { renderGame, buildHeatMap, buildRedZone } from "./game.js";
+import { renderGame, buildHeatMap, buildRedZone, exportCSV, exportHudl, csvRow, downloadFile } from "./game.js";
 
 // ── Hudl CSV roster import helper ────────────────────────────────────────────
 
@@ -78,7 +78,7 @@ export async function renderDashboard(container, user, teamId, userRole, onRefre
           </svg>
         </div>
         <div class="dash-header-right">
-          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.1.1</span>
+          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.2.1</span>
           <span class="coach-email" id="headerTeamName">${esc(teamName)}</span>
           <span class="role-badge role-${userRole}">${roleName(userRole)}</span>
           ${isAdmin
@@ -307,6 +307,7 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
           <button class="snav-btn active" data-pane="general">General</button>
           <button class="snav-btn" data-pane="scoring">Scoring</button>
           <button class="snav-btn" data-pane="library">Library</button>
+          <button class="snav-btn" data-pane="tags">Result Tags</button>
           <button class="snav-btn" data-pane="players">Players</button>
           <button class="snav-btn" data-pane="v7">7v7</button>
           <button class="snav-btn" data-pane="scrimmage">Scrimmage</button>
@@ -408,9 +409,26 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
             <h3 style="margin:0 0 4px;font-size:15px">Autocomplete Library</h3>
             <p style="font-size:13px;color:var(--slate);margin:0 0 14px">Entries available to all coaches when charting plays. Sorted alphabetically.</p>
             <div id="proLibAll"></div>
-            <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
+            <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
               <button class="btn-secondary" id="saveLibraryBtn">Save Library</button>
+              <button class="btn-ghost" id="clearLibraryBtn" style="color:#dc2626;border-color:#fca5a5">Clear Entire Library</button>
               <span id="libraryMsg" style="font-size:12px;display:none"></span>
+            </div>
+          </div>
+
+          <div class="settings-pane" data-pane="tags" hidden>
+            <h3 style="margin:0 0 4px;font-size:15px">Result Tags</h3>
+            <p style="font-size:13px;color:var(--slate);margin:0 0 14px">Tags available in the "Result" chip row when charting plays. Drag to reorder. 1st Down and TD are always available.</p>
+            <div id="tagsList" style="margin-bottom:12px"></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+              <input id="newTagInput" type="text" placeholder="Add a tag…" maxlength="30"
+                     style="flex:1;min-width:120px;padding:8px 10px;border:1.5px solid var(--chalk);border-radius:8px;font-size:14px;font-family:var(--body)">
+              <button class="btn-secondary" id="addTagBtn">Add</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <button class="btn-secondary" id="saveTagsBtn">Save Tags</button>
+              <button class="btn-ghost" id="resetTagsBtn" style="font-size:13px">Reset to defaults</button>
+              <span id="tagsMsg" style="font-size:12px;display:none"></span>
             </div>
           </div>
 
@@ -1093,6 +1111,76 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
       msgEl.style.display = "inline";
     }
   });
+
+  overlay.querySelector("#clearLibraryBtn").addEventListener("click", async () => {
+    if (!confirm("Clear the entire autocomplete library? This cannot be undone.")) return;
+    localLib = { forms:[], calls:[], motions:[], fronts:[], coverages:[] };
+    renderLibPro();
+    const msgEl = overlay.querySelector("#libraryMsg");
+    try {
+      await updateTeam(teamId, { library: localLib });
+      msgEl.style.color = "#15803d"; msgEl.textContent = "Library cleared.";
+    } catch (err) {
+      msgEl.style.color = "#DC2626"; msgEl.textContent = "Error: " + err.message;
+    }
+    msgEl.style.display = "inline";
+    setTimeout(() => { msgEl.style.display = "none"; }, 2500);
+  });
+
+  // ── Result Tags pane ──────────────────────────────────────────────────────────
+  const DEFAULT_RESULT_TAGS = ["1st Down", "TD", "Incomplete", "Sack", "Penalty", "Turnover"];
+  let localTags = [...((team?.tags && team.tags.length) ? team.tags : DEFAULT_RESULT_TAGS)];
+
+  function renderTagsList() {
+    const el = overlay.querySelector("#tagsList");
+    if (!el) return;
+    if (!localTags.length) {
+      el.innerHTML = `<p style="font-size:13px;color:var(--slate)">No custom tags. Using defaults.</p>`;
+      return;
+    }
+    el.innerHTML = localTags.map((t, i) => `
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="flex:1;padding:6px 10px;background:var(--chalk);border-radius:6px;font-size:14px">${esc(t)}</span>
+        <button class="btn-ghost tag-del-btn" data-idx="${i}" style="color:#dc2626;font-size:18px;line-height:1;padding:0 6px">&times;</button>
+      </div>
+    `).join("");
+    el.querySelectorAll(".tag-del-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        localTags.splice(parseInt(btn.dataset.idx, 10), 1);
+        renderTagsList();
+      });
+    });
+  }
+  renderTagsList();
+
+  overlay.querySelector("#addTagBtn").addEventListener("click", () => {
+    const inp = overlay.querySelector("#newTagInput");
+    const val = (inp.value || "").trim();
+    if (!val) return;
+    if (!localTags.map(t => t.toLowerCase()).includes(val.toLowerCase())) {
+      localTags.push(val);
+      renderTagsList();
+    }
+    inp.value = "";
+  });
+  overlay.querySelector("#newTagInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") overlay.querySelector("#addTagBtn").click();
+  });
+  overlay.querySelector("#resetTagsBtn").addEventListener("click", () => {
+    localTags = [...DEFAULT_RESULT_TAGS];
+    renderTagsList();
+  });
+  overlay.querySelector("#saveTagsBtn").addEventListener("click", async () => {
+    const msgEl = overlay.querySelector("#tagsMsg");
+    try {
+      await updateTeam(teamId, { tags: localTags });
+      msgEl.style.color = "#15803d"; msgEl.textContent = "Saved.";
+    } catch (err) {
+      msgEl.style.color = "#DC2626"; msgEl.textContent = "Error: " + err.message;
+    }
+    msgEl.style.display = "inline";
+    setTimeout(() => { msgEl.style.display = "none"; }, 2000);
+  });
 }
 
 async function refreshMembersList(overlay, teamId, user) {
@@ -1208,9 +1296,14 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
               <div class="sub">All saved games &middot; aggregated statistics</div>
             </div>
           </div>
-          ${isAdmin
-            ? `<button id="srArchiveBtn" class="btn-ghost">Archive Season</button>`
-            : ""}
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <button id="srCsvBtn" class="btn-ghost" style="font-size:13px">Season CSV</button>
+            <button id="srHudlBtn" class="btn-ghost" style="font-size:13px">Season Hudl</button>
+            <button id="srPrintBtn" class="btn-ghost" style="font-size:13px">&#128438; Print</button>
+            ${isAdmin
+              ? `<button id="srArchiveBtn" class="btn-ghost">Archive Season</button>`
+              : ""}
+          </div>
         </div>
       </header>
 
@@ -1338,7 +1431,10 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
         `<button class="srtab${currentActive ? " srtab-active" : ""}" data-stab="current">Current Season</button>` +
         seasons.map((s) => {
           const active = viewingSeasonId === s.id;
-          return `<button class="srtab${active ? " srtab-active" : ""}" data-stab="${esc(s.id)}">${esc(s.name)}</button>`;
+          const delBtn = isAdmin
+            ? `<span class="srtab-del" data-del-season="${esc(s.id)}" title="Delete archived season" style="margin-left:4px;font-size:14px;color:#dc2626;line-height:1;cursor:pointer">&times;</span>`
+            : "";
+          return `<span class="srtab${active ? " srtab-active" : ""}" data-stab="${esc(s.id)}" style="display:inline-flex;align-items:center">${esc(s.name)}${delBtn}</span>`;
         }).join("") +
         `</div>`;
     }
@@ -1386,6 +1482,8 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
               <button class="btn-secondary sr-view-btn" data-view-game="${esc(g.id)}">Play Log</button>
               <button class="btn-secondary" data-hm-game="${esc(g.id)}">Heat Map</button>
               <button class="btn-secondary" data-rz-game="${esc(g.id)}">Red Zone</button>
+              <button class="btn-ghost sr-csv-btn" data-csv-game="${esc(g.id)}" style="font-size:13px">CSV</button>
+              <button class="btn-ghost sr-hudl-btn" data-hudl-game="${esc(g.id)}" style="font-size:13px">Hudl</button>
             </div>
           </div>
           <div id="sr-gd-${esc(g.id)}" style="display:none;margin-top:12px">
@@ -1451,6 +1549,26 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
       });
     });
 
+    // Wire per-game CSV export buttons
+    body.querySelectorAll(".sr-csv-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-csv-game");
+        const g = activeGames.find((g) => g.id === id);
+        if (!g) return;
+        exportCSV(g.plays, g, srTeamSettings);
+      });
+    });
+
+    // Wire per-game Hudl export buttons
+    body.querySelectorAll(".sr-hudl-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-hudl-game");
+        const g = activeGames.find((g) => g.id === id);
+        if (!g) return;
+        exportHudl(g.plays, g, srTeamSettings);
+      });
+    });
+
     // Wire game name edit buttons
     body.querySelectorAll(".sr-edit-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -1498,14 +1616,80 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
   }
 
   function rewireTabs() {
-    document.querySelectorAll(".srtab").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const tid = btn.getAttribute("data-stab");
+    document.querySelectorAll(".srtab").forEach((el) => {
+      el.addEventListener("click", (e) => {
+        if (e.target.closest(".srtab-del")) return;
+        const tid = el.getAttribute("data-stab");
         viewingSeasonId = tid === "current" ? null : tid;
         renderBody();
       });
     });
+    if (isAdmin) {
+      document.querySelectorAll(".srtab-del").forEach((x) => {
+        x.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const sid = x.getAttribute("data-del-season");
+          const s = seasons.find(s => s.id === sid);
+          const name = s ? s.name : "this season";
+          if (!confirm(`Delete "${name}" and all its games? This cannot be undone.`)) return;
+          try {
+            await deleteSeason(teamId, sid);
+            seasons = seasons.filter(s => s.id !== sid);
+            allGames = allGames.filter(g => g.seasonId !== sid);
+            if (viewingSeasonId === sid) viewingSeasonId = null;
+            renderBody();
+          } catch (err) {
+            alert("Could not delete season: " + err.message);
+          }
+        });
+      });
+    }
   }
+
+  // ── Season-level export buttons (always visible in header) ───────────────────
+  function seasonLabel() {
+    if (!viewingSeasonId) return "Current_Season";
+    const s = seasons.find(x => x.id === viewingSeasonId);
+    return (s ? s.name : "Season").replace(/\s+/g, "_");
+  }
+
+  document.getElementById("srCsvBtn").addEventListener("click", () => {
+    const activeGames = getActiveGames();
+    if (!activeGames.length) { alert("No games in this season."); return; }
+    const rosterMap = {};
+    (srTeamSettings.roster || []).forEach(p => { rosterMap[p.id] = `#${p.jersey} ${p.name}`; });
+    const head = csvRow(["Game","Date","Play #","Down","Distance","Yardline","Hash","Play Type","Formation","Play Call","Motion","Defensive Front","Coverage","Yards Gained","Effective","Tags","Notes","Passer","Receiver","Rusher"]);
+    const rows = activeGames.flatMap(g =>
+      g.plays.map((p, i) => csvRow([
+        g.opponent || "Untitled", g.date || "",
+        i + 1, p.down || "", p.dist || "", p.yl || "", p.hash, p.type,
+        p.form || "", p.call || "", p.motion || "", p.front || "", p.coverage || "",
+        p.yards, p.success ? "Y" : "N", (p.tags || []).join("|"), p.note || "",
+        rosterMap[p.passer] || "", rosterMap[p.receiver] || "", rosterMap[p.rusher] || "",
+      ]))
+    );
+    downloadFile(`${seasonLabel()}.csv`, [head, ...rows].join("\n"), "text/csv");
+  });
+
+  document.getElementById("srHudlBtn").addEventListener("click", () => {
+    const activeGames = getActiveGames();
+    if (!activeGames.length) { alert("No games in this season."); return; }
+    const rosterMap = {};
+    (srTeamSettings.roster || []).forEach(p => { rosterMap[p.id] = `#${p.jersey} ${p.name}`; });
+    const head = csvRow(["Game","Date","Play #","Down","Distance","Yardline","Hash","Team Side","Play Type","Formation","Play Call","Motion","Defensive Front","Coverage","Yards Gained","Effective","Tags","Notes","Passer","Receiver","Rusher"]);
+    const rows = activeGames.flatMap(g =>
+      g.plays.map((p, i) => csvRow([
+        g.opponent || "Untitled", g.date || "",
+        i + 1, p.down || "", p.dist || "", p.yl || "", p.hash, "O", p.type,
+        p.form || "", p.call || "", p.motion || "", p.front || "", p.coverage || "",
+        p.yards, p.success ? "Y" : "N", (p.tags || []).join("|"), p.note || "",
+        rosterMap[p.passer] || "", rosterMap[p.receiver] || "", rosterMap[p.rusher] || "",
+      ]))
+    );
+    downloadFile(`${seasonLabel()}_hudl.csv`, [head, ...rows].join("\n"), "text/csv");
+  });
+
+  document.getElementById("srPrintBtn").addEventListener("click", () => window.print());
 
   renderBody();
 }
