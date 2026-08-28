@@ -350,7 +350,7 @@ export function renderGame(container, user, teamId, game, onBack) {
   }
 
   // ---- autocomplete dropdowns ----
-  const AC_IDS = ["formDrop","callDrop","motionDrop","frontDrop","coverageDrop"];
+  const AC_IDS = ["formDrop","callDrop","playLabelDrop","backfieldDrop","motionDrop","frontDrop","coverageDrop"];
   function closeAllAC() {
     AC_IDS.forEach((id) => {
       const d = document.getElementById(id);
@@ -406,8 +406,10 @@ export function renderGame(container, user, teamId, game, onBack) {
     });
   }
   bindAC("form",     "formDrop",     "form");
-  bindAC("call",     "callDrop",     "call");
-  bindAC("motion",   "motionDrop",   "motion");
+  bindAC("call",         "callDrop",       "call");
+  bindAC("playLabelFld", "playLabelDrop",  "label");
+  bindAC("backfield",    "backfieldDrop",  "backfield");
+  bindAC("motion",       "motionDrop",     "motion");
   bindAC("front",    "frontDrop",    "front");
   bindAC("coverage", "coverageDrop", "coverage");
 
@@ -429,10 +431,12 @@ export function renderGame(container, user, teamId, game, onBack) {
     document.querySelector(".entry").classList.remove("editing");
     document.querySelector(".entry h2").textContent = "Log a play";
     document.getElementById("yards").value = "";
-    document.getElementById("call").value = "";
-    document.getElementById("form").value = "";
-    document.getElementById("front").value = "";
-    document.getElementById("coverage").value = "";
+    document.getElementById("call").value         = "";
+    document.getElementById("playLabelFld").value = "";
+    document.getElementById("backfield").value    = "";
+    document.getElementById("form").value         = "";
+    document.getElementById("front").value        = "";
+    document.getElementById("coverage").value     = "";
     draft.tags = [];
     Array.from(document.querySelectorAll("#tags .chip")).forEach((c) => c.classList.remove("on"));
     draft.effTouched = false;
@@ -458,10 +462,12 @@ export function renderGame(container, user, teamId, game, onBack) {
     const dist  = document.getElementById("dist").value;
     const yards = getYards();
     const form     = titleCase(document.getElementById("form").value.trim());
-    const call     = titleCase(document.getElementById("call").value.trim());
-    const motion   = draft.motionOn ? titleCase(document.getElementById("motion").value.trim()) : "";
-    const front    = is7 ? "" : titleCase(document.getElementById("front").value.trim());
-    const coverage = titleCase(document.getElementById("coverage").value.trim());
+    const call      = titleCase(document.getElementById("call").value.trim());
+    const label     = titleCase(document.getElementById("playLabelFld").value.trim());
+    const backfield = titleCase(document.getElementById("backfield").value.trim());
+    const motion    = draft.motionOn ? titleCase(document.getElementById("motion").value.trim()) : "";
+    const front     = is7 ? "" : titleCase(document.getElementById("front").value.trim());
+    const coverage  = titleCase(document.getElementById("coverage").value.trim());
     const sp = settings.scrimmPlays || 10;
 
     const playData = {
@@ -472,7 +478,7 @@ export function renderGame(container, user, teamId, game, onBack) {
       yl:       getYL(),
       hash:     draft.hash,
       type:     draft.type,
-      form, call, motion, front, coverage, yards,
+      form, call, label, backfield, motion, front, coverage, yards,
       tags:     draft.tags.slice(),
       success:  draft.effective,
       auto:     !draft.effTouched,
@@ -558,7 +564,9 @@ export function renderGame(container, user, teamId, game, onBack) {
     const ylNum = Number(p.yl); draft.ylSign = ylNum < 0 ? -1 : 1; paintYlSign();
     document.getElementById("yl").value = Math.abs(ylNum) || "";
     document.getElementById("form").value = p.form || "";
-    document.getElementById("call").value = p.call || "";
+    document.getElementById("call").value         = p.call      || "";
+    document.getElementById("playLabelFld").value = p.label     || "";
+    document.getElementById("backfield").value    = p.backfield || "";
     document.getElementById("yards").value = Math.abs(p.yards);
     draft.yardSign = Number(p.yards) < 0 ? -1 : 1; paintYardSign();
     draft.motionOn = !!p.motion;
@@ -946,6 +954,16 @@ function buildHTML(game, mode) {
           <input id="call" type="text" autocomplete="off" autocapitalize="words"
                  placeholder="Start typing &mdash; past entries appear">
           <div class="ac-drop" id="callDrop" hidden></div>
+        </div>
+        <div class="fld grow"><label>Tags</label>
+          <input id="playLabelFld" type="text" autocomplete="off" autocapitalize="words"
+                 placeholder="Start typing &mdash; past entries appear">
+          <div class="ac-drop" id="playLabelDrop" hidden></div>
+        </div>
+        <div class="fld grow"><label>Backfield</label>
+          <input id="backfield" type="text" autocomplete="off" autocapitalize="words"
+                 placeholder="Start typing &mdash; past entries appear">
+          <div class="ac-drop" id="backfieldDrop" hidden></div>
         </div>
       </div>
 
