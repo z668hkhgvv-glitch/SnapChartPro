@@ -90,7 +90,7 @@ export async function renderDashboard(container, user, teamId, userRole, onRefre
           </svg>
         </div>
         <div class="dash-header-right">
-          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.4.4</span>
+          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.4.5</span>
           <span class="coach-email" id="headerTeamName">&hellip;</span>
           <span class="role-badge role-${userRole}">${roleName(userRole)}</span>
           ${isAdmin
@@ -436,7 +436,7 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
     trackPlayers: team?.trackPlayers || false,
     roster: team?.roster || [],
     rosterSort: team?.rosterSort || "number",
-    library: team?.library || { forms:[], calls:[], motions:[], fronts:[], coverages:[] },
+    library: team?.library || { forms:[], calls:[], labels:[], backfields:[], motions:[], fronts:[], coverages:[] },
     coachName: team?.coachName || "",
   };
   const ACCENT_COLORS = [
@@ -456,14 +456,24 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
   const currentScrimPlaysEff = teamSettings.settings?.effScrimPlays ?? teamSettings.effScrimPlays ?? (teamSettings.scrimmPlays ?? 10);
   const currentSeriesType = teamSettings.settings?.scrimmageSeriesType || 'fixed';
   const LIB_CATS_PRO = [
-    {key:"forms",    label:"Formations"},
-    {key:"calls",    label:"Play Calls"},
-    {key:"motions",  label:"Motions"},
-    {key:"fronts",   label:"Defensive Fronts"},
-    {key:"coverages",label:"Coverages"},
+    {key:"forms",      label:"Formations"},
+    {key:"calls",      label:"Play Calls"},
+    {key:"labels",     label:"Play Call Labels"},
+    {key:"backfields", label:"Backfields"},
+    {key:"motions",    label:"Motions"},
+    {key:"fronts",     label:"Defensive Fronts"},
+    {key:"coverages",  label:"Coverages"},
   ];
   function libAlphaSortPro(arr){ return [...arr].sort((a,b)=>a.toLowerCase().localeCompare(b.toLowerCase())); }
-  let localLib = { forms:[...(teamSettings.library.forms||[])], calls:[...(teamSettings.library.calls||[])], motions:[...(teamSettings.library.motions||[])], fronts:[...(teamSettings.library.fronts||[])], coverages:[...(teamSettings.library.coverages||[])] };
+  let localLib = {
+    forms:      [...(teamSettings.library.forms      || [])],
+    calls:      [...(teamSettings.library.calls      || [])],
+    labels:     [...(teamSettings.library.labels     || [])],
+    backfields: [...(teamSettings.library.backfields || [])],
+    motions:    [...(teamSettings.library.motions    || [])],
+    fronts:     [...(teamSettings.library.fronts     || [])],
+    coverages:  [...(teamSettings.library.coverages  || [])],
+  };
   let libEditingCatPro = null, libEditingIdxPro = -1;
 
   const overlay = document.createElement("div");
@@ -1361,8 +1371,8 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
 
   overlay.querySelector("#clearLibraryBtn").addEventListener("click", async () => {
     if (!confirm("Clear the entire autocomplete library? This cannot be undone.")) return;
-    localLib = { forms:[], calls:[], motions:[], fronts:[], coverages:[] };
-    renderLibPro();
+    localLib = { forms:[], calls:[], labels:[], backfields:[], motions:[], fronts:[], coverages:[] };
+    renderProLib();
     const msgEl = overlay.querySelector("#libraryMsg");
     try {
       await updateTeam(teamId, { library: localLib });
