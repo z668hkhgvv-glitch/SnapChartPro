@@ -19,7 +19,7 @@
  *
  *   invites/{emailKey}
  *     email, teamId, teamName, role, invitedByEmail, invitedAt
- *     emailKey = email.toLowerCase() with @ and . replaced by _
+ *     emailKey = email.toLowerCase() (email used directly as document ID)
  */
 
 import {
@@ -107,7 +107,7 @@ export async function removeMember(teamId, uid) {
 // ── Invites ───────────────────────────────────────────────────────────────────
 
 function inviteKey(email) {
-  return email.toLowerCase().replace(/[@.]/g, "_");
+  return email.toLowerCase();
 }
 
 export async function checkInvite(email) {

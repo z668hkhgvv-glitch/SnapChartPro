@@ -33,11 +33,10 @@ service cloud.firestore {
         get(/databases/$(database)/documents/teams/$(teamId)).data.ownerUid == request.auth.uid;
     }
 
-    // Compute the invite document key the same way the client does:
-    //   email.toLowerCase().replace(/[@.]/g, "_")
-    // RE2 replace replaces ALL occurrences; [.] matches literal dot in a character class.
+    // Invite document key is simply the lowercased email address.
+    // Firestore document IDs support @ and . — no encoding needed.
     function inviteKeyFor(email) {
-      return email.lower().replace('@', '_').replace('[.]', '_');
+      return email.lower();
     }
 
     function pendingInviteForTeam(teamId) {
