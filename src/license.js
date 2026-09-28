@@ -2,6 +2,7 @@ import { db } from "./firebase.js";
 import {
   doc, getDoc, updateDoc,
   collection, query, where, getDocs,
+  runTransaction,
   Timestamp,
 } from "firebase/firestore";
 
@@ -37,38 +38,34 @@ export async function activateLicense(uid, teamId, rawKey) {
   const key = rawKey.trim().toUpperCase().replace(/\s/g, "");
   if (!key) throw new Error("Please enter a license key.");
   const ref = doc(db, "licenses", key);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) throw new Error("Invalid license key. Please check and try again.");
-  const lic = snap.data();
-  if (lic.status === "revoked") throw new Error("This key has been revoked. Contact SidelineLabz.");
-  if (lic.activatedTeam && lic.activatedTeam !== teamId) {
-    throw new Error("This key is already activated for another team.");
-  }
-  if (lic.activatedTeam === teamId) {
-    if (lic.expiresAt && lic.expiresAt.toDate() < new Date()) {
-      throw new Error("Your license has expired. Contact SidelineLabz to renew.");
+
+  // Use a transaction to prevent two users from simultaneously activating the
+  // same key — the check-then-write is atomic, so the second write is rejected.
+  return await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error("Invalid license key. Please check and try again.");
+    const lic = snap.data();
+    if (lic.status === "revoked") throw new Error("This key has been revoked. Contact SidelineLabz.");
+    if (lic.activatedTeam && lic.activatedTeam !== teamId) {
+      throw new Error("This key is already activated for another team.");
     }
-    return { licensed: true, license: { ...lic, _key: key } };
-  }
-  const now = new Date();
-  const expiresAt = new Date(now);
-  expiresAt.setFullYear(expiresAt.getFullYear() + 1);
-  await updateDoc(ref, {
-    activatedTeam: teamId,
-    activatedBy: uid,
-    activatedAt: Timestamp.fromDate(now),
-    expiresAt: Timestamp.fromDate(expiresAt),
-    status: "active",
-  });
-  return {
-    licensed: true,
-    license: {
-      ...lic,
+    if (lic.activatedTeam === teamId) {
+      if (lic.expiresAt && lic.expiresAt.toDate() < new Date()) {
+        throw new Error("Your license has expired. Contact SidelineLabz to renew.");
+      }
+      return { licensed: true, license: { ...lic, _key: key } };
+    }
+    const now = new Date();
+    const expiresAt = new Date(now);
+    expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+    const fields = {
       activatedTeam: teamId,
       activatedBy: uid,
       activatedAt: Timestamp.fromDate(now),
       expiresAt: Timestamp.fromDate(expiresAt),
-      _key: key,
-    },
-  };
+      status: "active",
+    };
+    tx.update(ref, fields);
+    return { licensed: true, license: { ...lic, ...fields, _key: key } };
+  });
 }

@@ -340,7 +340,7 @@
         <td>${esc(l.issuedTo?.name)}<br><span style="color:#6b7280;font-size:11px">${esc(l.issuedTo?.email)}</span></td>
         <td style="font-size:12px">${esc(tierStr)}</td>
         <td><span class="badge ${st}">${st}</span></td>
-        <td style="font-size:12px">${l.activatedTeam ? fmtDate(l.activatedAt) : (l.activatedBy ? fmtDate(l.activatedAt) : "—")}<br><span style="color:#6b7280;font-size:11px">${l.activatedTeam ? "team: " + l.activatedTeam.slice(0, 10) + "…" : (l.activatedBy ? "uid: " + l.activatedBy.slice(0, 10) + "…" : "")}</span></td>
+        <td style="font-size:12px">${l.activatedTeam ? fmtDate(l.activatedAt) : (l.activatedBy ? fmtDate(l.activatedAt) : "—")}<br><span style="color:#6b7280;font-size:11px">${l.activatedTeam ? "team: " + esc(l.activatedTeam.slice(0, 10)) + "…" : (l.activatedBy ? "uid: " + esc(l.activatedBy.slice(0, 10)) + "…" : "")}</span></td>
         <td style="font-size:12px">${fmtDate(l.expiresAt)}</td>
         <td style="font-size:12px;color:#6b7280">${fmtDate(l.createdAt)}</td>
         <td>

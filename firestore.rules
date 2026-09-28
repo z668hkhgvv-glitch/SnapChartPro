@@ -178,12 +178,15 @@ service cloud.firestore {
         request.auth.token.email == 'rcatalano1@gmail.com' ||
         // User activating an unactivated key
         (resource.data.activatedTeam == null &&
-         request.resource.data.activatedTeam is string &&
          request.resource.data.activatedBy   == request.auth.uid &&
+         // activatedTeam must be the user's own team (prevents activating to a competitor's teamId)
+         exists(/databases/$(database)/documents/userTeams/$(request.auth.uid)) &&
+         request.resource.data.activatedTeam == userTeamId() &&
          // Must activate to "active" status (not any other value)
          request.resource.data.status        == "active" &&
-         // Must set a valid expiry timestamp within 366 days from now
+         // expiresAt must be a timestamp between 29 and 366 days from now
          request.resource.data.expiresAt     is timestamp &&
+         request.resource.data.expiresAt     >= request.time + duration.value(29, 'd') &&
          request.resource.data.expiresAt     <= request.time + duration.value(366, 'd') &&
          // Lock these fields against modification
          request.resource.data.tier          == resource.data.tier &&

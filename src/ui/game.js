@@ -2020,8 +2020,8 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       }
     </style></head><body>
       <div class="no-print">
-        <button onclick="window.print()" style="font-family:Inter,sans-serif;font-size:13px;padding:6px 14px;background:#16317f;color:#fff;border:none;border-radius:6px;cursor:pointer">&#128438; Save PDF</button>
-        <button onclick="window.close()" style="font-family:Inter,sans-serif;font-size:13px;padding:6px 14px;background:#f3f4f6;color:#0f1830;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer">&#x2190; Back to App</button>
+        <button id="pdfPrintBtn" style="font-family:Inter,sans-serif;font-size:13px;padding:6px 14px;background:#16317f;color:#fff;border:none;border-radius:6px;cursor:pointer">&#128438; Save PDF</button>
+        <button id="pdfCloseBtn" style="font-family:Inter,sans-serif;font-size:13px;padding:6px 14px;background:#f3f4f6;color:#0f1830;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer">&#x2190; Back to App</button>
       </div>
       <div class="pdf-header">
         <div class="pdf-team">${esc(teamName)}</div>
@@ -2037,6 +2037,10 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       ${playLogHtml}
     </body></html>`);
     win.document.close();
+    // Wire print/close from parent context — popup has script-src 'none' CSP
+    // so inline onclick in the popup is blocked; parent-side listeners are not.
+    win.document.getElementById("pdfPrintBtn").addEventListener("click", () => win.print());
+    win.document.getElementById("pdfCloseBtn").addEventListener("click", () => win.close());
     win.onafterprint = () => win.close();
     setTimeout(() => { win.print(); }, 400);
   });
