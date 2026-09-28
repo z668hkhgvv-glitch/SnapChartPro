@@ -90,7 +90,7 @@ export async function renderDashboard(container, user, teamId, userRole, onRefre
           </svg>
         </div>
         <div class="dash-header-right">
-          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.4.7</span>
+          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.4.8</span>
           <span class="coach-email" id="headerTeamName">&hellip;</span>
           <span class="role-badge role-${userRole}">${roleName(userRole)}</span>
           ${isAdmin
@@ -2052,7 +2052,7 @@ function srPlayTable(plays) {
       <td><span class="pill ${esc(p.type || "run")}">${p.type === "run" ? "RUN" : p.type === "punt" ? "PUNT" : "PASS"}</span></td>
       <td>${esc(p.form || "—")}</td>
       <td>${esc(p.call || "—")}</td>
-      <td><span class="res ${dir}">${sign}${p.yards}</span></td>
+      <td><span class="res ${dir}">${sign}${Number(p.yards)||0}</span></td>
       <td><span class="succ ${p.success ? "y" : "n"} static">${p.success ? "✓" : "✗"}</span></td>
     </tr>`;
   }).join("");
@@ -2062,9 +2062,9 @@ function srPlayTable(plays) {
 }
 
 function srDnDist(p) {
-  if (p.mode === "scrimmage") return p.playNum ? "Play " + String(p.playNum) : "—";
-  const ds = (p.dist === "" || p.dist == null) ? "" : String(p.dist);
-  return ds ? String(p.down) + " & " + ds : String(p.down || "");
+  if (p.mode === "scrimmage") return p.playNum ? "Play " + esc(String(p.playNum)) : "—";
+  const ds = (p.dist === "" || p.dist == null) ? "" : esc(String(p.dist));
+  return ds ? esc(String(p.down)) + " &amp; " + ds : esc(String(p.down || ""));
 }
 
 function srBuildDrillDown(callName, gamesData) {
@@ -2104,7 +2104,7 @@ function srBuildDrillDown(callName, gamesData) {
         <td>${p.yl != null && p.yl !== "" ? esc(String(p.yl)) : "&ndash;"}<span style="color:var(--slate);font-size:11px"> ${esc(p.hash || "")}</span></td>
         <td>${esc(p.form || "—")}</td>
         <td>${tags}</td>
-        <td><span class="res ${dir}">${sign}${p.yards}</span></td>
+        <td><span class="res ${dir}">${sign}${Number(p.yards)||0}</span></td>
         <td><span class="succ ${p.success ? "y" : "n"} static">${p.success ? "✓" : "✗"}</span></td>
       </tr>`;
     }).join("");

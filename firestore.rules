@@ -33,6 +33,23 @@ service cloud.firestore {
         get(/databases/$(database)/documents/teams/$(teamId)).data.ownerUid == request.auth.uid;
     }
 
+    // Compute the invite document key the same way the client does:
+    //   email.toLowerCase().replace(/[@.]/g, "_")
+    // RE2 replace replaces ALL occurrences; [.] matches literal dot in a character class.
+    function inviteKeyFor(email) {
+      return email.lower().replace('@', '_').replace('[.]', '_');
+    }
+
+    function pendingInviteForTeam(teamId) {
+      return request.auth.token.email != null &&
+        exists(/databases/$(database)/documents/invites/$(inviteKeyFor(request.auth.token.email))) &&
+        get(/databases/$(database)/documents/invites/$(inviteKeyFor(request.auth.token.email))).data.teamId == teamId;
+    }
+
+    function gameEnded(teamId, gameId) {
+      return get(/databases/$(database)/documents/teams/$(teamId)/games/$(gameId)).data.get('ended', false) == true;
+    }
+
     // ── userTeams/{uid} — personal team-lookup doc, owner only ───────────────
 
     match /userTeams/{uid} {
@@ -56,11 +73,13 @@ service cloud.firestore {
       allow create: if signedIn() && (
         // Team owner adding themselves as first admin during createTeamWithAdmin
         (request.auth.uid == memberId && isTeamOwner(teamId)) ||
-        // Existing admin inviting/accepting a coach
+        // Existing admin inviting a coach (creates the member doc on accept)
         isAdmin(teamId) ||
         // Invite acceptance: user creating their own (non-admin) member doc
+        // — verified against a pending invite on this team
         (request.auth.uid == memberId &&
-         request.resource.data.role in ["editor", "readonly"])
+         request.resource.data.role in ["editor", "readonly"] &&
+         pendingInviteForTeam(teamId))
       );
 
       allow update: if isAdmin(teamId);
@@ -76,11 +95,16 @@ service cloud.firestore {
     }
 
     // ── teams/{teamId}/games/{gameId}/plays/{playId} ─────────────────────────
+    // Admins bypass the ended lock; editors are blocked when the game is ended.
 
     match /teams/{teamId}/games/{gameId}/plays/{playId} {
-      allow read:          if isMember(teamId);
-      allow create, update: if isEditor(teamId);
-      allow delete:        if isEditor(teamId);
+      allow read: if isMember(teamId);
+
+      allow create, update: if isEditor(teamId) &&
+        (isAdmin(teamId) || !gameEnded(teamId, gameId));
+
+      allow delete: if isEditor(teamId) &&
+        (isAdmin(teamId) || !gameEnded(teamId, gameId));
     }
 
     // ── teams/{teamId}/seasons/{seasonId} ────────────────────────────────────
@@ -91,37 +115,28 @@ service cloud.firestore {
       allow delete: if isAdmin(teamId);
     }
 
-    // ── Catch-all for any other subcollections under a team ──────────────────
-
-    match /teams/{teamId}/{rest=**} {
-      allow read:  if isMember(teamId);
-      allow write: if isEditor(teamId);
-    }
+    // NOTE: No catch-all write rule — all write paths must be explicitly listed
+    // above. Omitting a catch-all means any unlisted subcollection defaults to
+    // deny, which is the secure default.
 
     // ── invites/{emailKey} ───────────────────────────────────────────────────
-    // Invites are stored at invites/{email-with-@-and-.-replaced-by-_}
-    // Only the invited user (by email) or an admin of the relevant team can access.
 
     match /invites/{emailKey} {
       allow read: if signedIn() && (
-        // Invited user reading their own invite
         request.auth.token.email != null &&
           request.auth.token.email.lower() == resource.data.email ||
-        // Team admin viewing their team's pending invites
         isAdmin(resource.data.teamId)
       );
 
       allow create: if signedIn() && isAdmin(request.resource.data.teamId);
 
       allow delete: if signedIn() && (
-        // Invited user declining/accepting
         request.auth.token.email != null &&
           request.auth.token.email.lower() == resource.data.email ||
-        // Admin cancelling invite
         isAdmin(resource.data.teamId)
       );
 
-      allow update: if false; // invites are immutable once created
+      allow update: if false;
     }
 
     // ── licenses/{key} ───────────────────────────────────────────────────────
@@ -135,15 +150,18 @@ service cloud.firestore {
       allow update: if signedIn() && (
         // Admin can change anything
         request.auth.token.email == 'rcatalano1@gmail.com' ||
-        // User may activate an unactivated key — ONLY these two fields may change
+        // User activating an unactivated key
         (resource.data.activatedTeam == null &&
          request.resource.data.activatedTeam is string &&
-         // Lock all other fields against user modification
          request.resource.data.activatedBy   == request.auth.uid &&
-         request.resource.data.status        == resource.data.status &&
+         // Must activate to "active" status (not any other value)
+         request.resource.data.status        == "active" &&
+         // Must set a valid expiry timestamp
+         request.resource.data.expiresAt     is timestamp &&
+         // Lock these fields against modification
          request.resource.data.tier          == resource.data.tier &&
-         request.resource.data.issuedTo      == resource.data.issuedTo &&
-         request.resource.data.expiresAt     == resource.data.expiresAt)
+         request.resource.data.maxCoaches    == resource.data.maxCoaches &&
+         request.resource.data.issuedTo      == resource.data.issuedTo)
       );
     }
 
