@@ -854,7 +854,7 @@ function buildHTML(game, mode) {
   const is7    = mode === "7v7";
   const isScrim = mode === "scrimmage";
   const title  = game.opponent ? "vs " + esc(game.opponent) : "Untitled game";
-  const sub    = game.date ? game.date : "";
+  const sub    = esc(game.date || "");
 
   return `
 <div class="game-wrap">
@@ -863,8 +863,8 @@ function buildHTML(game, mode) {
       <div style="display:flex;align-items:center;gap:12px">
         <button id="gameBackBtn" class="back" aria-label="Back to dashboard">&larr;</button>
         <div>
-          <h1>${esc(title)}</h1>
-          <div class="sub">${esc(sub)}${sub ? " · " : ""}${esc(mode)} mode</div>
+          <h1>${title}</h1>
+          <div class="sub">${sub}${sub ? " · " : ""}${esc(mode)} mode</div>
           <span id="modeBadge" class="modebadge" style="display:none"></span>
         </div>
       </div>
