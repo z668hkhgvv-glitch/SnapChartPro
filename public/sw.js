@@ -1,4 +1,4 @@
-const VERSION = "1.4.9";
+const VERSION = "1.5.0";
 const CACHE   = "snapchart-pro-" + VERSION;
 
 self.addEventListener("install", (e) => {
@@ -49,5 +49,5 @@ self.addEventListener("fetch", (e) => {
 
 // The page sends "skipWaiting" when the user taps "Update now"
 self.addEventListener("message", (e) => {
-  if (e.data === "skipWaiting") self.skipWaiting();
+  if (e.data === "skipWaiting" && e.source) self.skipWaiting();
 });

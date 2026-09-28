@@ -24,8 +24,8 @@ const DEFAULT_FORMS = [
 // ---------- pure helpers (no DOM) -------------------------------------------
 
 function esc(s) {
-  return String(s == null ? "" : s).replace(/[&<>"]/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
   );
 }
 
@@ -363,8 +363,14 @@ export function downloadFile(filename, content, mime) {
   URL.revokeObjectURL(url);
 }
 
+function sanitizeCsvCell(v) {
+  const s = String(v == null ? "" : v);
+  // Prefix formula-trigger characters to prevent CSV injection in Excel/Sheets
+  return /^[=+\-@|]/.test(s) ? "'" + s : s;
+}
+
 export function csvRow(vals) {
-  return vals.map((v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`).join(",");
+  return vals.map((v) => `"${sanitizeCsvCell(v).replace(/"/g, '""')}"`).join(",");
 }
 
 export function exportCSV(plays, game, teamSettings) {
@@ -440,10 +446,10 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   const is7   = mode === "7v7";
   const isScrim = mode === "scrimmage";
 
-  // Change 1 — Apply team accent color
-  const accentColor = teamSettings.settings?.accentColor || "#16317F";
+  // Apply team accent color — validate format to prevent CSS injection
+  const rawAccent = teamSettings.settings?.accentColor || "";
+  const accentColor = /^#[0-9A-Fa-f]{6}$/.test(rawAccent) ? rawAccent : "#16317F";
   document.documentElement.style.setProperty("--royal", accentColor);
-  // Derive a lighter tint for backgrounds (approx 15% opacity on white)
   document.documentElement.style.setProperty("--royal-bg", accentColor + "26");
 
   const settings = {
@@ -1960,6 +1966,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     const win = window.open("", "_blank");
     if (!win) return;
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'none'">
     <title>${esc(docTitle)}</title><style>
       *{box-sizing:border-box;margin:0;padding:0}
       body{font-family:Inter,Arial,sans-serif;font-size:13px;color:#0f1830;padding:28px 32px;max-width:1020px;margin:0 auto}

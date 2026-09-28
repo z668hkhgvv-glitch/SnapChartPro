@@ -177,6 +177,16 @@ export async function getGames(teamId) {
 }
 
 export async function deleteGame(teamId, gameId) {
+  // Delete the plays subcollection first — Firestore does not cascade-delete.
+  // Orphaned plays would remain readable by team members indefinitely.
+  const playsSnap = await getDocs(
+    collection(db, "teams", teamId, "games", gameId, "plays")
+  );
+  if (playsSnap.docs.length > 0) {
+    const batch = writeBatch(db);
+    playsSnap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  }
   await deleteDoc(doc(db, "teams", teamId, "games", gameId));
 }
 
@@ -253,12 +263,22 @@ export async function archiveSeason(teamId, name) {
 
 export async function deleteSeason(teamId, seasonId) {
   const gamesSnap = await getDocs(collection(db, "teams", teamId, "games"));
-  const batch = writeBatch(db);
-  gamesSnap.docs.forEach((gDoc) => {
-    if (gDoc.data().seasonId === seasonId) {
-      batch.delete(gDoc.ref);
+  const seasonGames = gamesSnap.docs.filter((d) => d.data().seasonId === seasonId);
+
+  // Delete plays subcollections for each game before deleting game docs
+  for (const gDoc of seasonGames) {
+    const playsSnap = await getDocs(
+      collection(db, "teams", teamId, "games", gDoc.id, "plays")
+    );
+    if (playsSnap.docs.length > 0) {
+      const playBatch = writeBatch(db);
+      playsSnap.docs.forEach((d) => playBatch.delete(d.ref));
+      await playBatch.commit();
     }
-  });
+  }
+
+  const batch = writeBatch(db);
+  seasonGames.forEach((gDoc) => batch.delete(gDoc.ref));
   batch.delete(doc(db, "teams", teamId, "seasons", seasonId));
   await batch.commit();
 }

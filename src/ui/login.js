@@ -58,7 +58,7 @@ export function renderLogin(container) {
           </div>
         </div>
 
-        <p class="auth-footer">SidelineLabz &middot; SnapChart Pro <span style="font-family:var(--num);font-size:11px;opacity:0.6;margin-left:4px">1.4.9</span></p>
+        <p class="auth-footer">SidelineLabz &middot; SnapChart Pro <span style="font-family:var(--num);font-size:11px;opacity:0.6;margin-left:4px">1.5.0</span></p>
       </div>
     </div>
   `;
@@ -170,9 +170,9 @@ export function renderLogin(container) {
 
 function friendlyError(code, message = "") {
   const map = {
-    // Wrong credentials
-    "auth/user-not-found":           "No account found with that email.",
-    "auth/wrong-password":           "Incorrect password.",
+    // Wrong credentials — use the same message for all cases to prevent email enumeration
+    "auth/user-not-found":           "Email or password is incorrect.",
+    "auth/wrong-password":           "Email or password is incorrect.",
     "auth/invalid-credential":       "Email or password is incorrect.",
     "auth/invalid-login-credentials":"Email or password is incorrect.",
     // Account issues

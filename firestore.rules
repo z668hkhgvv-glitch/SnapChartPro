@@ -39,14 +39,25 @@ service cloud.firestore {
       return email.lower();
     }
 
+    // Require email_verified to prevent invite hijacking via pre-registration
+    // with an unverified account on someone else's email address.
     function pendingInviteForTeam(teamId) {
       return request.auth.token.email != null &&
+        request.auth.token.email_verified == true &&
         exists(/databases/$(database)/documents/invites/$(inviteKeyFor(request.auth.token.email))) &&
         get(/databases/$(database)/documents/invites/$(inviteKeyFor(request.auth.token.email))).data.teamId == teamId;
     }
 
+    function inviteDocFor() {
+      return get(/databases/$(database)/documents/invites/$(inviteKeyFor(request.auth.token.email)));
+    }
+
     function gameEnded(teamId, gameId) {
       return get(/databases/$(database)/documents/teams/$(teamId)/games/$(gameId)).data.get('ended', false) == true;
+    }
+
+    function userTeamId() {
+      return get(/databases/$(database)/documents/userTeams/$(request.auth.uid)).data.teamId;
     }
 
     // ── userTeams/{uid} — personal team-lookup doc, owner only ───────────────
@@ -75,10 +86,14 @@ service cloud.firestore {
         // Existing admin inviting a coach (creates the member doc on accept)
         isAdmin(teamId) ||
         // Invite acceptance: user creating their own (non-admin) member doc
-        // — verified against a pending invite on this team
+        // — verified against a pending invite on this team (email must be verified)
+        // — role must match the invite exactly (no readonly→editor escalation)
+        // — stored email must match the authenticated token email
         (request.auth.uid == memberId &&
          request.resource.data.role in ["editor", "readonly"] &&
-         pendingInviteForTeam(teamId))
+         pendingInviteForTeam(teamId) &&
+         request.resource.data.role == inviteDocFor().data.role &&
+         request.resource.data.email == request.auth.token.email.lower())
       );
 
       allow update: if isAdmin(teamId);
@@ -86,11 +101,17 @@ service cloud.firestore {
     }
 
     // ── teams/{teamId}/games/{gameId} ────────────────────────────────────────
+    // Editors can create/update games but cannot change the `ended` field —
+    // only admins can lock or reopen a game.
 
     match /teams/{teamId}/games/{gameId} {
-      allow read:          if isMember(teamId);
-      allow create, update: if isEditor(teamId);
-      allow delete:        if isAdmin(teamId);
+      allow read:   if isMember(teamId);
+      allow create: if isEditor(teamId);
+      allow update: if isEditor(teamId) && (
+        isAdmin(teamId) ||
+        !("ended" in request.resource.data.diff(resource.data).affectedKeys())
+      );
+      allow delete: if isAdmin(teamId);
     }
 
     // ── teams/{teamId}/games/{gameId}/plays/{playId} ─────────────────────────
@@ -111,6 +132,7 @@ service cloud.firestore {
     match /teams/{teamId}/seasons/{seasonId} {
       allow read:   if isMember(teamId);
       allow create: if isEditor(teamId);
+      allow update: if false;
       allow delete: if isAdmin(teamId);
     }
 
@@ -141,7 +163,12 @@ service cloud.firestore {
     // ── licenses/{key} ───────────────────────────────────────────────────────
 
     match /licenses/{key} {
-      allow read: if signedIn();
+      // Users can only read their own team's license; admin can read all.
+      allow read: if signedIn() && (
+        request.auth.token.email == 'rcatalano1@gmail.com' ||
+        (exists(/databases/$(database)/documents/userTeams/$(request.auth.uid)) &&
+         resource.data.activatedTeam == userTeamId())
+      );
 
       allow create, delete: if signedIn() &&
         request.auth.token.email == 'rcatalano1@gmail.com';
@@ -155,8 +182,9 @@ service cloud.firestore {
          request.resource.data.activatedBy   == request.auth.uid &&
          // Must activate to "active" status (not any other value)
          request.resource.data.status        == "active" &&
-         // Must set a valid expiry timestamp
+         // Must set a valid expiry timestamp within 366 days from now
          request.resource.data.expiresAt     is timestamp &&
+         request.resource.data.expiresAt     <= request.time + duration.value(366, 'd') &&
          // Lock these fields against modification
          request.resource.data.tier          == resource.data.tier &&
          request.resource.data.maxCoaches    == resource.data.maxCoaches &&

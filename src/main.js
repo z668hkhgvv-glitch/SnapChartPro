@@ -120,11 +120,15 @@ async function route(user) {
     }
 
     if (!teamId) {
-      const invite = await checkInvite(user.email);
-      if (invite) {
-        const result = await acceptInvite(user.uid, user.email, invite);
-        teamId = result.teamId;
-        role   = result.role;
+      // Only accept invites for verified email addresses — prevents invite
+      // hijacking by someone who pre-registers with another coach's email.
+      if (user.emailVerified) {
+        const invite = await checkInvite(user.email);
+        if (invite) {
+          const result = await acceptInvite(user.uid, user.email, invite);
+          teamId = result.teamId;
+          role   = result.role;
+        }
       }
     }
 
