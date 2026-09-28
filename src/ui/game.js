@@ -414,9 +414,27 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   let hmFilter = "";
 
   // Role gates
+  const isAdmin   = userRole === "admin";
   const canChart  = userRole !== "readonly";   // add & edit plays
   const canDelete = userRole !== "readonly";   // delete individual plays
   // (deleting games is admin-only, enforced in dashboard)
+
+  let gameLocked = !!game.ended;
+  function isLocked() { return gameLocked && !isAdmin; }
+
+  function updateLockUI() {
+    const banner = document.getElementById("gameEndedBanner");
+    const btn    = document.getElementById("endGameBtn");
+    if (banner) banner.hidden = !gameLocked;
+    if (btn)    btn.textContent = gameLocked ? "🔓 Reopen Game" : "🔒 End Game";
+    const entryEl = document.querySelector(".entry");
+    if (entryEl) {
+      entryEl.style.opacity       = isLocked() ? "0.4" : "";
+      entryEl.style.pointerEvents = isLocked() ? "none" : "";
+    }
+    const lockedNote = document.getElementById("gameLockedNote");
+    if (lockedNote) lockedNote.hidden = !isLocked();
+  }
 
   const mode = game.mode || "standard";
   const is7   = mode === "7v7";
@@ -466,7 +484,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     note:      "",
   };
 
-  container.innerHTML = buildHTML(game, mode, canChart);
+  container.innerHTML = buildHTML(game, mode, canChart, isAdmin);
 
   // Populate result chips from team settings (or defaults)
   const DEFAULT_RESULT_TAGS = ["1st Down", "TD", "Incomplete", "Sack", "Penalty", "Turnover"];
@@ -490,6 +508,28 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     if (unsub) unsub();
     onBack();
   });
+
+  // ---- End Game / Reopen button (admin only) ----
+  const endGameBtn = document.getElementById("endGameBtn");
+  if (endGameBtn) {
+    endGameBtn.addEventListener("click", async () => {
+      const newLocked = !gameLocked;
+      const msg = newLocked
+        ? "End this game? Editors will no longer be able to add or edit plays."
+        : "Reopen this game? Editors will be able to add and edit plays again.";
+      if (!confirm(msg)) return;
+      try {
+        await updateGame(teamId, game.id, { ended: newLocked });
+        gameLocked = newLocked;
+        updateLockUI();
+      } catch (err) {
+        alert("Could not update game: " + err.message);
+      }
+    });
+  }
+
+  // Apply initial lock state
+  updateLockUI();
 
   // ---- segmented controls ----
   function wireSeg(id, key, after) {
@@ -1412,6 +1452,10 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
 
   // ---- add / save a play ----
   async function handleAddPlay() {
+    if (isLocked()) {
+      alert("This game has ended.\n\nPlay data is locked. Ask your admin to reopen the game.");
+      return;
+    }
     const dist  = document.getElementById("dist").value;
     const yards = getYards();
     const form     = titleCase(document.getElementById("form").value.trim());
@@ -1563,6 +1607,10 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
 
   function startEdit(id) {
     if (!canChart) return;
+    if (isLocked()) {
+      alert("This game has ended.\n\nPlay data is locked. Ask your admin to reopen the game.");
+      return;
+    }
     const p = plays.find((x) => x.id === id);
     if (!p) return;
     editingId = id;
@@ -1603,6 +1651,10 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   }
 
   async function handleDelete(id) {
+    if (isLocked()) {
+      alert("This game has ended.\n\nPlay data is locked. Ask your admin to reopen the game.");
+      return;
+    }
     if (!confirm("Delete this play? This can't be undone.")) return;
     try {
       await dbDeletePlay(teamId, game.id, id);
@@ -1612,6 +1664,10 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   }
 
   async function handleToggleSuccess(id) {
+    if (isLocked()) {
+      alert("This game has ended.\n\nPlay data is locked. Ask your admin to reopen the game.");
+      return;
+    }
     const p = plays.find((x) => x.id === id);
     if (!p) return;
     try {
@@ -2512,7 +2568,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
 
 // ---------- HTML template ----------------------------------------------------
 
-function buildHTML(game, mode, canChart) {
+function buildHTML(game, mode, canChart, isAdmin) {
   const is7    = mode === "7v7";
   const isScrim = mode === "scrimmage";
   const title  = game.opponent ? "vs " + esc(game.opponent) : "Untitled game";
@@ -2532,7 +2588,11 @@ function buildHTML(game, mode, canChart) {
       </div>
       <div style="display:flex;align-items:center;gap:8px">
         <span id="liveChip" class="live-chip">● LIVE</span>
+        ${canChart && isAdmin ? `<button id="endGameBtn" class="btn-ghost" style="font-size:13px;padding:5px 12px;height:34px;white-space:nowrap">${game.ended ? "🔓 Reopen Game" : "🔒 End Game"}</button>` : ""}
       </div>
+    </div>
+    <div id="gameEndedBanner" ${game.ended ? "" : "hidden"} style="background:#FEF9C3;border-top:1px solid #FCD34D;padding:7px 16px;font-size:13px;color:#78350F;display:flex;align-items:center;gap:6px">
+      🔒 <b>Game ended</b> &mdash; ${isAdmin ? "you can still edit and delete plays as admin." : "play data is locked. Contact your admin to make changes."}
     </div>
   </header>
 

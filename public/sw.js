@@ -1,4 +1,4 @@
-const VERSION = "1.4.6";
+const VERSION = "1.4.7";
 const CACHE   = "snapchart-pro-" + VERSION;
 
 self.addEventListener("install", (e) => {

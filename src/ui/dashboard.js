@@ -90,7 +90,7 @@ export async function renderDashboard(container, user, teamId, userRole, onRefre
           </svg>
         </div>
         <div class="dash-header-right">
-          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.4.6</span>
+          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.4.7</span>
           <span class="coach-email" id="headerTeamName">&hellip;</span>
           <span class="role-badge role-${userRole}">${roleName(userRole)}</span>
           ${isAdmin
@@ -235,7 +235,10 @@ async function refreshGameList(container, user, teamId, userRole, onRefresh, lic
 
   list.innerHTML = games.map((g) => `
     <div class="game-card" data-id="${esc(g.id)}">
-      <div class="game-card-name">${g.opponent ? "vs " + esc(g.opponent) : "Untitled game"}</div>
+      <div class="game-card-name">
+        ${g.opponent ? "vs " + esc(g.opponent) : "Untitled game"}
+        ${g.ended ? `<span style="display:inline-block;margin-left:6px;font-size:11px;font-weight:600;padding:1px 6px;border-radius:10px;background:#FEF9C3;color:#78350F;border:1px solid #FCD34D;vertical-align:middle">🔒 ENDED</span>` : ""}
+      </div>
       <div class="game-card-meta">${esc(g.date || "")}${g.date ? " &middot; " : ""}${esc(g.mode || "standard")}</div>
       <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
         <button class="btn-secondary open-game" data-id="${esc(g.id)}">Open</button>
