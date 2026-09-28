@@ -137,14 +137,16 @@ export async function getTeamInvites(teamId) {
 }
 
 export async function acceptInvite(uid, email, invite) {
-  await setDoc(doc(db, "teams", invite.teamId, "members", uid), {
+  const batch = writeBatch(db);
+  batch.set(doc(db, "teams", invite.teamId, "members", uid), {
     email: email.toLowerCase(),
     role: invite.role,
     addedAt: serverTimestamp(),
     addedBy: null,
   });
-  await setUserTeam(uid, invite.teamId);
-  await cancelInvite(email);
+  batch.set(doc(db, "userTeams", uid), { teamId: invite.teamId });
+  batch.delete(doc(db, "invites", inviteKey(email)));
+  await batch.commit();
   return { teamId: invite.teamId, role: invite.role };
 }
 

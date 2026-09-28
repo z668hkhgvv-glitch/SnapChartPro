@@ -58,7 +58,7 @@ export function renderLogin(container) {
           </div>
         </div>
 
-        <p class="auth-footer">SidelineLabz &middot; SnapChart Pro <span style="font-family:var(--num);font-size:11px;opacity:0.6;margin-left:4px">1.5.4</span></p>
+        <p class="auth-footer">SidelineLabz &middot; SnapChart Pro <span style="font-family:var(--num);font-size:11px;opacity:0.6;margin-left:4px">1.5.5</span></p>
       </div>
     </div>
   `;
@@ -189,5 +189,5 @@ function friendlyError(code, message = "") {
   };
   if (map[code]) return map[code];
   // Surface the raw code so it's diagnosable without opening DevTools
-  return code ? `Sign-in failed (${code}).` : "Something went wrong — check your connection and try again.";
+  return "Something went wrong — check your connection and try again.";
 }
