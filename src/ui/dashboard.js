@@ -90,9 +90,9 @@ export async function renderDashboard(container, user, teamId, userRole, onRefre
           </svg>
         </div>
         <div class="dash-header-right">
-          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.5.2</span>
+          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.5.3</span>
           <span class="coach-email" id="headerTeamName">&hellip;</span>
-          <span class="role-badge role-${userRole}">${roleName(userRole)}</span>
+          <span class="role-badge role-${esc(userRole)}">${roleName(userRole)}</span>
           ${isAdmin
             ? `<button id="settingsBtn" class="btn-ghost">&#9881; Settings</button>`
             : ""}
@@ -1542,7 +1542,7 @@ async function refreshMembersList(overlay, teamId, user) {
       ${invites.map((inv) => `
         <div class="member-row" style="opacity:.85">
           <div class="member-email">${esc(inv.email)}</div>
-          <span class="role-badge role-${inv.role}">${roleName(inv.role)}</span>
+          <span class="role-badge role-${esc(inv.role)}">${roleName(inv.role)}</span>
           <span style="font-size:12px;color:#6B7280;flex:1">Pending</span>
           <button class="cancel-invite icon-btn" data-email="${esc(inv.email)}"
                   title="Cancel invite">&times;</button>
@@ -1946,7 +1946,7 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
   function seasonLabel() {
     if (!viewingSeasonId) return "Current_Season";
     const s = seasons.find(x => x.id === viewingSeasonId);
-    return (s ? s.name : "Season").replace(/\s+/g, "_");
+    return (s ? s.name : "Season").replace(/[^\w\s-]/g, "").replace(/\s+/g, "_").slice(0, 40);
   }
 
   document.getElementById("srCsvBtn").addEventListener("click", () => {

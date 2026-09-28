@@ -106,7 +106,7 @@ export function renderOnboarding(container, user, onDone) {
       await createTeamWithAdmin(user.uid, user.email, name);
       onDone();
     } catch (err) {
-      errEl.textContent = "Could not create team: " + err.message;
+      errEl.textContent = "Could not create team. Please try again.";
       errEl.hidden = false;
       btn.disabled = false;
       btn.textContent = "Create Team";
