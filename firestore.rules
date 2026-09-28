@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Each user's data lives under teams/{uid}/* where uid is their Firebase Auth uid.
+    // Only the owner can read or write their own team and its sub-collections.
+
+    match /teams/{teamId} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == teamId;
+
+      match /games/{gameId} {
+        allow read, write: if request.auth != null
+                           && request.auth.uid == teamId;
+
+        match /plays/{playId} {
+          allow read, write: if request.auth != null
+                             && request.auth.uid == teamId;
+        }
+      }
+    }
+
+    // Deny everything else by default (no catch-all write rule)
+  }
+}

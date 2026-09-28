@@ -24,8 +24,8 @@ const BUILTIN_FORMS = [
 // ---------- pure helpers (no DOM) -------------------------------------------
 
 function esc(s) {
-  return String(s == null ? "" : s).replace(/[&<>"]/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
   );
 }
 
@@ -359,7 +359,7 @@ export function renderGame(container, user, teamId, game, onBack) {
   }
   function getACList(key) {
     const fromPlays = plays.map((p) => p[key] || "");
-    const defaults  = key === "form" ? DEFAULT_FORMS : [];
+    const defaults  = key === "form" ? BUILTIN_FORMS : [];
     return uniqCI(defaults.concat(fromPlays)).sort();
   }
   function bindAC(inputId, dropId, listKey) {
@@ -549,7 +549,7 @@ export function renderGame(container, user, teamId, game, onBack) {
         if (isScrim) updateScrimHint();
       }
     } catch (err) {
-      alert("Could not save play: " + err.message);
+      alert("Could not save play. Please try again.");
     }
     addBtn.disabled = false;
   }
@@ -594,7 +594,7 @@ export function renderGame(container, user, teamId, game, onBack) {
     try {
       await dbDeletePlay(teamId, game.id, id);
     } catch (err) {
-      alert("Could not delete play: " + err.message);
+      alert("Could not delete play. Please try again.");
     }
   }
 
@@ -604,7 +604,7 @@ export function renderGame(container, user, teamId, game, onBack) {
     try {
       await dbUpdatePlay(teamId, game.id, id, { success: !p.success, auto: false });
     } catch (err) {
-      alert("Could not update play: " + err.message);
+      alert("Could not update play. Please try again.");
     }
   }
 

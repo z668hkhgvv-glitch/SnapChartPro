@@ -12,6 +12,12 @@ import { getGames, createGame } from "../db.js";
 import { renderGame } from "./game.js";
 import { renderSettings } from "./settings.js";
 
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
+  );
+}
+
 export async function renderDashboard(container, user, teamId, gameToOpen) {
   container.innerHTML = `
     <div class="dash-wrap">
@@ -27,7 +33,7 @@ export async function renderDashboard(container, user, teamId, gameToOpen) {
           </svg>
         </div>
         <div class="dash-header-right">
-          <span class="coach-email">${user.email}</span>
+          <span class="coach-email">${esc(user.email)}</span>
           <button id="logoutBtn" class="btn-ghost">Sign out</button>
         </div>
       </header>
@@ -68,10 +74,10 @@ async function refreshGameList(container, user, teamId) {
   }
 
   list.innerHTML = games.map((g) => `
-    <div class="game-card" data-id="${g.id}">
-      <div class="game-card-name">${g.opponent ? "vs " + g.opponent : "Untitled game"}</div>
-      <div class="game-card-meta">${g.date || ""} &middot; ${g.mode || "standard"}</div>
-      <button class="btn-secondary open-game" data-id="${g.id}">Open</button>
+    <div class="game-card" data-id="${esc(g.id)}">
+      <div class="game-card-name">${g.opponent ? "vs " + esc(g.opponent) : "Untitled game"}</div>
+      <div class="game-card-meta">${esc(g.date || "")} &middot; ${esc(g.mode || "standard")}</div>
+      <button class="btn-secondary open-game" data-id="${esc(g.id)}">Open</button>
     </div>
   `).join("");
 

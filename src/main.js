@@ -5,13 +5,11 @@ import { renderDashboard } from "./ui/dashboard.js";
 
 const app = document.getElementById("app");
 
-// Placeholder teamId until team-management sprint is built.
-// After that, the teamId will come from the user's Firestore profile.
-const TEAM_ID_PLACEHOLDER = "default-team";
-
 onAuthChange((user) => {
   if (user) {
-    renderDashboard(app, user, TEAM_ID_PLACEHOLDER);
+    // Use the user's UID as the team ID — gives each coach their own
+    // isolated data namespace with no cross-user access.
+    renderDashboard(app, user, user.uid);
   } else {
     renderLogin(app);
   }
