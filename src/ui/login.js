@@ -58,7 +58,7 @@ export function renderLogin(container) {
           </div>
         </div>
 
-        <p class="auth-footer">SidelineLabz &middot; SnapChart Pro <span style="font-family:var(--num);font-size:11px;opacity:0.6;margin-left:4px">1.5.1</span></p>
+        <p class="auth-footer">SidelineLabz &middot; SnapChart Pro <span style="font-family:var(--num);font-size:11px;opacity:0.6;margin-left:4px">1.5.2</span></p>
       </div>
     </div>
   `;
@@ -159,7 +159,6 @@ export function renderLogin(container) {
         await registerCoach(email, password);
       }
     } catch (err) {
-      console.error("Auth error:", err.code, err.message);
       errEl.textContent = friendlyError(err.code, err.message);
       errEl.hidden = false;
       btn.disabled = false;

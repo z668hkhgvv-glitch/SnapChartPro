@@ -143,11 +143,12 @@ async function route(user) {
       <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;
                   flex-direction:column;gap:12px;background:#F3F4F6;font-family:Inter,sans-serif">
         <div style="color:#DC2626;font-size:14px">Failed to load. Check your connection.</div>
-        <button onclick="location.reload()" style="padding:8px 16px;border-radius:8px;
+        <button id="retryBtn" style="padding:8px 16px;border-radius:8px;
           border:1.5px solid #16317F;background:#fff;color:#16317F;cursor:pointer;font-size:14px">
           Retry
         </button>
       </div>`;
+    document.getElementById("retryBtn")?.addEventListener("click", () => location.reload());
   }
 }
 

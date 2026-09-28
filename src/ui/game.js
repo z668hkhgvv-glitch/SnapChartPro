@@ -366,7 +366,7 @@ export function downloadFile(filename, content, mime) {
 function sanitizeCsvCell(v) {
   const s = String(v == null ? "" : v);
   // Prefix formula-trigger characters to prevent CSV injection in Excel/Sheets
-  return /^[=+\-@|]/.test(s) ? "'" + s : s;
+  return /^[=+\-@|\t]/.test(s) ? "'" + s : s;
 }
 
 export function csvRow(vals) {
@@ -383,7 +383,8 @@ export function exportCSV(plays, game, teamSettings) {
     p.success ? "Y" : "N", (Array.isArray(p.tags) ? p.tags : []).join("|"), p.note || "",
     rosterMap[p.passer] || "", rosterMap[p.receiver] || "", rosterMap[p.rusher] || "",
   ]));
-  const title = (game.opponent ? "vs_" + game.opponent : "Game").replace(/\s+/g, "_");
+  const safeOpp = (game.opponent || "").replace(/[^\w\s-]/g, "").replace(/\s+/g, "_").slice(0, 40);
+  const title = safeOpp ? "vs_" + safeOpp : "Game";
   downloadFile(`${title}_${game.date || "chart"}.csv`, [head, ...rows].join("\n"), "text/csv");
 }
 
@@ -397,7 +398,8 @@ export function exportHudl(plays, game, teamSettings) {
     p.yards, p.success ? "Y" : "N", (Array.isArray(p.tags) ? p.tags : []).join("|"), p.note || "",
     rosterMap[p.passer] || "", rosterMap[p.receiver] || "", rosterMap[p.rusher] || "",
   ]));
-  const title = (game.opponent ? "vs_" + game.opponent : "Game").replace(/\s+/g, "_");
+  const safeOppH = (game.opponent || "").replace(/[^\w\s-]/g, "").replace(/\s+/g, "_").slice(0, 40);
+  const title = safeOppH ? "vs_" + safeOppH : "Game";
   downloadFile(`${title}_${game.date || "chart"}_hudl.csv`, [head, ...rows].join("\n"), "text/csv");
 }
 
@@ -1928,9 +1930,9 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     (teamSettings.roster || []).forEach(r => rosterMap[r.id] = r);
     const playRows  = plays.map((p, i) => {
       const sign   = p.yards > 0 ? "+" : "";
-      const ctx    = p.mode === "scrimmage" ? `Ser ${p.series || ""}` : `Q${p.qtr || ""}`;
-      const dn     = p.down ? `${p.down}&amp;${p.dist}` : "&mdash;";
-      const ball   = p.yl != null && p.yl !== "" ? `${p.yl} ${esc(p.hash || "")}` : "&mdash;";
+      const ctx    = p.mode === "scrimmage" ? `Ser ${esc(p.series || "")}` : `Q${esc(p.qtr || "")}`;
+      const dn     = p.down ? `${esc(p.down)}&amp;${esc(p.dist)}` : "&mdash;";
+      const ball   = p.yl != null && p.yl !== "" ? `${esc(String(p.yl))} ${esc(p.hash || "")}` : "&mdash;";
       const typeLbl = p.type === "run" ? "RUN" : p.type === "punt" ? "PUNT" : "PASS";
       const motion  = p.motion   ? `<div class="sub">+ ${esc(p.motion)} motion</div>` : "";
       const front   = p.front    ? `<div class="sub">front: ${esc(p.front)}</div>` : "";

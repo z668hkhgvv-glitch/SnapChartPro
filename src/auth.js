@@ -4,11 +4,15 @@ import {
   signOut,
   onAuthStateChanged,
   sendPasswordResetEmail,
+  sendEmailVerification,
 } from "firebase/auth";
 import { auth } from "./firebase.js";
 
-export function registerCoach(email, password) {
-  return createUserWithEmailAndPassword(auth, email, password);
+export async function registerCoach(email, password) {
+  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  // Send verification email — invite acceptance is blocked for unverified accounts
+  await sendEmailVerification(cred.user);
+  return cred;
 }
 
 export function loginCoach(email, password) {

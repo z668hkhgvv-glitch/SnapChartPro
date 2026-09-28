@@ -335,7 +335,7 @@
       const tierNum = l.tier ? String(l.tier) : "";
       const tierStr = tierNum ? TIER_LABEL[tierNum] || ("Tier " + tierNum) : "—";
       return `<tr>
-        <td class="mono">${esc(l._key)} <button class="copy-btn" onclick="navigator.clipboard.writeText('${esc(l._key)}')">Copy</button></td>
+        <td class="mono">${esc(l._key)} <button class="copy-btn" data-action="copy" data-key="${esc(l._key)}">Copy</button></td>
         <td><b>${esc(l.issuedTo?.organization)}</b></td>
         <td>${esc(l.issuedTo?.name)}<br><span style="color:#6b7280;font-size:11px">${esc(l.issuedTo?.email)}</span></td>
         <td style="font-size:12px">${esc(tierStr)}</td>
@@ -345,32 +345,51 @@
         <td style="font-size:12px;color:#6b7280">${fmtDate(l.createdAt)}</td>
         <td>
           ${st !== "revoked"
-            ? `<button class="sm red" onclick="revokeKey('${esc(l._key)}')">Revoke</button>`
-            : `<button class="sm gray" onclick="reinstateKey('${esc(l._key)}')">Reinstate</button>`}
+            ? `<button class="sm red" data-action="revoke" data-key="${esc(l._key)}">Revoke</button>`
+            : `<button class="sm gray" data-action="reinstate" data-key="${esc(l._key)}">Reinstate</button>`}
         </td>
       </tr>`;
     }).join("");
   }
 
-  // ── revoke / reinstate ────────────────────────────────────────────────────────
+  // ── revoke / reinstate — delegated, no inline onclick ────────────────────────
 
-  window.revokeKey = async (key) => {
+  async function revokeKey(key) {
     if (!confirm(`Revoke key ${key}?\n\nThe user will lose access immediately.`)) return;
     try {
       await updateDoc(doc(db, "licenses", key), { status: "revoked" });
       allLicenses = allLicenses.map(l => l._key === key ? { ...l, status: "revoked" } : l);
       renderTable();
     } catch (e) { alert("Error: " + e.message); }
-  };
+  }
 
-  window.reinstateKey = async (key) => {
+  async function reinstateKey(key) {
     if (!confirm(`Reinstate key ${key}?`)) return;
     try {
       await updateDoc(doc(db, "licenses", key), { status: "active" });
       allLicenses = allLicenses.map(l => l._key === key ? { ...l, status: "active" } : l);
       renderTable();
     } catch (e) { alert("Error: " + e.message); }
-  };
+  }
+
+  // Event delegation on the table body — handles copy/revoke/reinstate
+  // without any inline onclick attributes (so the CSP can drop unsafe-inline).
+  document.getElementById("licBody").addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-action]");
+    if (!btn) return;
+    const key    = btn.dataset.key;
+    const action = btn.dataset.action;
+    if (action === "copy") {
+      navigator.clipboard.writeText(key).then(() => {
+        btn.textContent = "Copied!";
+        setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+      });
+    } else if (action === "revoke") {
+      await revokeKey(key);
+    } else if (action === "reinstate") {
+      await reinstateKey(key);
+    }
+  });
 </script>
 </body>
 </html>
