@@ -531,7 +531,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
         gameLocked = newLocked;
         updateLockUI();
       } catch (err) {
-        alert("Could not update game: " + err.message);
+        alert("Could not update game. Please try again.");
       }
     });
   }
@@ -587,7 +587,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     };
     try {
       await dbAddPlay(teamId, game.id, playData);
-    } catch (err) { alert("Could not save punt: " + err.message); return; }
+    } catch (err) { alert("Could not save. Please try again."); return; }
     draft.down = "1"; setSeg("down", "1");
     document.getElementById("dist").value = settings.defaultDist;
     paintPuntBtn();
@@ -1608,7 +1608,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
         }
       }
     } catch (err) {
-      alert("Could not save play: " + err.message);
+      alert("Could not save play. Please try again.");
     }
     addBtn.disabled = false;
   }
@@ -1667,7 +1667,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     try {
       await dbDeletePlay(teamId, game.id, id);
     } catch (err) {
-      alert("Could not delete play: " + err.message);
+      alert("Could not delete play. Please try again.");
     }
   }
 
@@ -1681,7 +1681,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     try {
       await dbUpdatePlay(teamId, game.id, id, { success: !p.success, auto: false });
     } catch (err) {
-      alert("Could not update play: " + err.message);
+      alert("Could not update play. Please try again.");
     }
   }
 

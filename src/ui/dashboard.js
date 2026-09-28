@@ -90,7 +90,7 @@ export async function renderDashboard(container, user, teamId, userRole, onRefre
           </svg>
         </div>
         <div class="dash-header-right">
-          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.5.3</span>
+          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.5.4</span>
           <span class="coach-email" id="headerTeamName">&hellip;</span>
           <span class="role-badge role-${esc(userRole)}">${roleName(userRole)}</span>
           ${isAdmin
@@ -218,8 +218,7 @@ async function refreshGameList(container, user, teamId, userRole, onRefresh, lic
   try {
     games = await getGames(teamId);
   } catch (err) {
-    console.error("getGames failed:", err);
-    list.innerHTML = `<div class="empty-state" style="color:#DC2626">Error loading games: ${esc(err.message)}</div>`;
+    list.innerHTML = `<div class="empty-state" style="color:#DC2626">Error loading games. Please refresh the page.</div>`;
     return;
   }
 
@@ -276,7 +275,7 @@ async function refreshGameList(container, user, teamId, userRole, onRefresh, lic
           await deleteGame(teamId, btn.dataset.id);
           await refreshGameList(container, user, teamId, userRole, onRefresh);
         } catch (err) {
-          alert("Could not delete: " + err.message);
+          alert("Could not delete. Please try again.");
         }
       });
     });
@@ -342,7 +341,7 @@ function showEditGameModal(game, teamId, onSaved) {
       document.body.removeChild(overlay);
       onSaved();
     } catch (err) {
-      errEl.textContent = "Could not save: " + err.message;
+      errEl.textContent = "Could not save. Please try again.";
       saveBtn.disabled = false;
     }
   });
@@ -416,8 +415,7 @@ function showNewGameModal(container, user, teamId, userRole, onRefresh, licensed
         loadGame(container, user, teamId, { id: gameId, opponent, date, mode },
                  userRole, onRefresh, licensed);
       } catch (err) {
-        console.error("createGame failed:", err);
-        alert("Could not create game: " + err.message);
+        alert("Could not create game. Please try again.");
       }
     });
   });
@@ -718,7 +716,6 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
                 <select id="inviteRole" class="role-sel">
                   <option value="editor">Editor</option>
                   <option value="readonly">Read-Only</option>
-                  <option value="admin">Admin</option>
                 </select>
                 <button class="btn-primary" id="sendInviteBtn">Invite</button>
               </div>
@@ -813,7 +810,7 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
         await renderDashboard(container, user, teamId, userRole, onRefresh);
       }, 1500);
     } catch (err) {
-      msg.textContent = err.message;
+      msg.textContent = "An error occurred. Please try again.";
       msg.style.color = "#DC2626";
       btn.disabled = false;
     }
@@ -850,7 +847,7 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
         localLib[cat] = libAlphaSortPro(localLib[cat]);
       });
     } catch (err) {
-      console.error("Failed to load play history:", err);
+      
     }
     renderProLib();
   }
@@ -881,7 +878,7 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
       setTimeout(() => { msgEl.style.display = "none"; }, 2000);
     } catch (err) {
       msgEl.style.color = "#DC2626";
-      msgEl.textContent = "Error: " + err.message;
+      msgEl.textContent = "An error occurred. Please try again.";
       msgEl.style.display = "block";
     }
   });
@@ -911,7 +908,7 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
       setTimeout(() => { msgEl.style.display = "none"; }, 2000);
     } catch (err) {
       msgEl.style.color = "#DC2626";
-      msgEl.textContent = "Error: " + err.message;
+      msgEl.textContent = "An error occurred. Please try again.";
       msgEl.style.display = "inline";
     }
   });
@@ -943,7 +940,7 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
       setTimeout(() => { msgEl.style.display = "none"; }, 2000);
     } catch (err) {
       msgEl.style.color = "#DC2626";
-      msgEl.textContent = "Error: " + err.message;
+      msgEl.textContent = "An error occurred. Please try again.";
       msgEl.style.display = "inline";
     }
   });
@@ -973,7 +970,7 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
       setTimeout(() => { msgEl.style.display = "none"; }, 2000);
     } catch (err) {
       msgEl.style.color = "#DC2626";
-      msgEl.textContent = "Error: " + err.message;
+      msgEl.textContent = "An error occurred. Please try again.";
       msgEl.style.display = "inline";
     }
   });
@@ -1000,7 +997,7 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
       setTimeout(() => { msgEl.style.display = "none"; }, 2000);
     } catch (err) {
       msgEl.style.color = "#DC2626";
-      msgEl.textContent = "Error: " + err.message;
+      msgEl.textContent = "An error occurred. Please try again.";
       msgEl.style.display = "inline";
     }
   });
@@ -1035,7 +1032,7 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
       setTimeout(() => { msgEl.style.display = "none"; }, 3000);
     } catch (err) {
       msgEl.style.color = "#DC2626";
-      msgEl.textContent = "Error: " + err.message;
+      msgEl.textContent = "An error occurred. Please try again.";
       msgEl.style.display = "inline";
     }
     btn.disabled = false;
@@ -1075,7 +1072,7 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
       msgEl.style.display = "inline";
     } catch (err) {
       msgEl.style.color = "#DC2626";
-      msgEl.textContent = "Error: " + err.message;
+      msgEl.textContent = "An error occurred. Please try again.";
       msgEl.style.display = "inline";
     }
     btn.disabled = false;
@@ -1106,7 +1103,7 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
       setTimeout(() => { msgEl.style.display = "none"; }, 2000);
     } catch (err) {
       msgEl.style.color = "#DC2626";
-      msgEl.textContent = "Error: " + err.message;
+      msgEl.textContent = "An error occurred. Please try again.";
       msgEl.style.display = "inline";
     }
   });
@@ -1157,7 +1154,7 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
       await refreshMembersList(overlay, teamId, user);
     } catch (err) {
       msgEl.style.color = "#DC2626";
-      msgEl.textContent = "Error: " + err.message;
+      msgEl.textContent = "An error occurred. Please try again.";
       msgEl.style.display = "block";
     }
 
@@ -1308,7 +1305,7 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
       setTimeout(() => { msgEl.style.display = "none"; }, 2000);
     } catch (err) {
       msgEl.style.color = "#DC2626";
-      msgEl.textContent = "Error: " + err.message;
+      msgEl.textContent = "An error occurred. Please try again.";
       msgEl.style.display = "inline";
     }
   });
@@ -1403,7 +1400,7 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
       msgEl.style.display = "inline";
       setTimeout(() => { msgEl.style.display = "none"; }, 2000);
     } catch (err) {
-      msgEl.style.color = "#DC2626"; msgEl.textContent = "Error: " + err.message;
+      msgEl.style.color = "#DC2626"; msgEl.textContent = "An error occurred. Please try again.";
       msgEl.style.display = "inline";
     }
   });
@@ -1417,7 +1414,7 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
       await updateTeam(teamId, { library: localLib });
       msgEl.style.color = "#15803d"; msgEl.textContent = "Library cleared.";
     } catch (err) {
-      msgEl.style.color = "#DC2626"; msgEl.textContent = "Error: " + err.message;
+      msgEl.style.color = "#DC2626"; msgEl.textContent = "An error occurred. Please try again.";
     }
     msgEl.style.display = "inline";
     setTimeout(() => { msgEl.style.display = "none"; }, 2500);
@@ -1472,7 +1469,7 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
       await updateTeam(teamId, { tags: localTags });
       msgEl.style.color = "#15803d"; msgEl.textContent = "Saved.";
     } catch (err) {
-      msgEl.style.color = "#DC2626"; msgEl.textContent = "Error: " + err.message;
+      msgEl.style.color = "#DC2626"; msgEl.textContent = "An error occurred. Please try again.";
     }
     msgEl.style.display = "inline";
     setTimeout(() => { msgEl.style.display = "none"; }, 2000);
@@ -1514,7 +1511,7 @@ async function refreshMembersList(overlay, teamId, user) {
       try {
         await updateMemberRole(teamId, sel.dataset.uid, sel.value);
       } catch (err) {
-        alert("Could not update role: " + err.message);
+        alert("Could not update role. Please try again.");
         await refreshMembersList(overlay, teamId, user);
       }
     });
@@ -1529,7 +1526,7 @@ async function refreshMembersList(overlay, teamId, user) {
         await removeMember(teamId, btn.dataset.uid);
         await refreshMembersList(overlay, teamId, user);
       } catch (err) {
-        alert("Could not remove: " + err.message);
+        alert("Could not remove member. Please try again.");
       }
     });
   });
@@ -1555,7 +1552,7 @@ async function refreshMembersList(overlay, teamId, user) {
           await cancelInvite(btn.dataset.email);
           await refreshMembersList(overlay, teamId, user);
         } catch (err) {
-          alert("Could not cancel invite: " + err.message);
+          alert("Could not cancel invite. Please try again.");
         }
       });
     });
@@ -1652,7 +1649,7 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
         document.getElementById("srArchiveModal").hidden = true;
         renderSeasonReview(container, user, teamId, userRole, onBack);
       } catch (err) {
-        alert("Could not archive: " + err.message);
+        alert("Could not archive. Please try again.");
         btn.disabled = false; btn.textContent = "Archive & Start New Season";
       }
     });
@@ -1702,7 +1699,7 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
     })));
   } catch (err) {
     document.getElementById("srBody").innerHTML =
-      `<div class="loading" style="color:#DC2626">Error loading data: ${esc(err.message)}</div>`;
+      `<div class="loading" style="color:#DC2626">Error loading data. Please refresh the page.</div>`;
     return;
   }
 
@@ -1935,7 +1932,7 @@ async function renderSeasonReview(container, user, teamId, userRole, onBack) {
             if (viewingSeasonId === sid) viewingSeasonId = null;
             renderBody();
           } catch (err) {
-            alert("Could not delete season: " + err.message);
+            alert("Could not delete season. Please try again.");
           }
         });
       });

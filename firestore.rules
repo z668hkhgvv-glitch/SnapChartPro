@@ -145,7 +145,9 @@ service cloud.firestore {
         isAdmin(resource.data.teamId)
       );
 
-      allow create: if signedIn() && isAdmin(request.resource.data.teamId);
+      allow create: if signedIn() && isAdmin(request.resource.data.teamId) &&
+        request.resource.data.role in ["editor", "readonly"] &&
+        emailKey == request.resource.data.email.lower();
 
       allow delete: if signedIn() && (
         request.auth.token.email != null &&

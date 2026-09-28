@@ -138,7 +138,6 @@ async function route(user) {
       renderOnboarding(app, user, () => route(user));
     }
   } catch (err) {
-    console.error("Route error:", err);
     app.innerHTML = `
       <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;
                   flex-direction:column;gap:12px;background:#F3F4F6;font-family:Inter,sans-serif">
