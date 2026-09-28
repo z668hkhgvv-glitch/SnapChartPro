@@ -218,6 +218,17 @@ export async function getPlays(teamId, gameId) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
+export async function getAllPlays(teamId) {
+  const games = await getDocs(collection(db, "teams", teamId, "games"));
+  const perGame = await Promise.all(
+    games.docs.map((g) =>
+      getDocs(collection(db, "teams", teamId, "games", g.id, "plays"))
+        .then((s) => s.docs.map((d) => d.data()))
+    )
+  );
+  return perGame.flat();
+}
+
 export async function getSeasons(teamId) {
   const snap = await getDocs(
     query(collection(db, "teams", teamId, "seasons"), orderBy("archivedAt", "desc"))

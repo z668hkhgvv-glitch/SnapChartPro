@@ -5,7 +5,7 @@ import {
   getMembers, getTeamInvites,
   inviteCoach, cancelInvite,
   updateMemberRole, removeMember,
-  getPlays, getSeasons, archiveSeason, deleteSeason,
+  getPlays, getAllPlays, getSeasons, archiveSeason, deleteSeason,
   updatePlay, updateGame,
 } from "../db.js";
 import { renderGame, buildHeatMap, buildRedZone, exportCSV, exportHudl, csvRow, downloadFile } from "./game.js";
@@ -90,7 +90,7 @@ export async function renderDashboard(container, user, teamId, userRole, onRefre
           </svg>
         </div>
         <div class="dash-header-right">
-          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.4.5</span>
+          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.4.6</span>
           <span class="coach-email" id="headerTeamName">&hellip;</span>
           <span class="role-badge role-${userRole}">${roleName(userRole)}</span>
           ${isAdmin
@@ -817,12 +817,48 @@ async function showSettingsModal(container, teamId, user, userRole, onRefresh, l
   });
 
   // Settings nav switching
+  let libPlayHistoryLoaded = false;
+
+  async function mergePlayHistoryIntoLib() {
+    if (libPlayHistoryLoaded) return;
+    libPlayHistoryLoaded = true;
+    const el = overlay.querySelector("#proLibAll");
+    if (el) el.innerHTML = `<p style="font-size:13px;color:var(--slate);padding:12px 0">Loading play history…</p>`;
+    try {
+      const plays = await getAllPlays(teamId);
+      const PLAY_FIELD_MAP = {
+        forms:      (p) => p.form,
+        calls:      (p) => p.call,
+        labels:     (p) => p.label,
+        backfields: (p) => p.backfield,
+        motions:    (p) => p.motion,
+        fronts:     (p) => p.front,
+        coverages:  (p) => p.coverage,
+      };
+      Object.entries(PLAY_FIELD_MAP).forEach(([cat, getter]) => {
+        const existing = new Set(localLib[cat].map(s => s.toLowerCase()));
+        plays.forEach(p => {
+          const v = (getter(p) || "").trim();
+          if (v && !existing.has(v.toLowerCase())) {
+            localLib[cat].push(v);
+            existing.add(v.toLowerCase());
+          }
+        });
+        localLib[cat] = libAlphaSortPro(localLib[cat]);
+      });
+    } catch (err) {
+      console.error("Failed to load play history:", err);
+    }
+    renderProLib();
+  }
+
   overlay.querySelectorAll(".snav-btn[data-pane]").forEach(btn => {
     btn.addEventListener("click", () => {
       overlay.querySelectorAll(".snav-btn[data-pane]").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
       overlay.querySelectorAll(".settings-pane").forEach(p => { p.hidden = true; });
       overlay.querySelector(`.settings-pane[data-pane="${btn.dataset.pane}"]`).hidden = false;
+      if (btn.dataset.pane === "library") mergePlayHistoryIntoLib();
     });
   });
 
