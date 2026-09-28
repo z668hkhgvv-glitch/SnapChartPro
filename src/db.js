@@ -239,3 +239,15 @@ export async function archiveSeason(teamId, name) {
   await batch.commit();
   return seasonId;
 }
+
+export async function deleteSeason(teamId, seasonId) {
+  const gamesSnap = await getDocs(collection(db, "teams", teamId, "games"));
+  const batch = writeBatch(db);
+  gamesSnap.docs.forEach((gDoc) => {
+    if (gDoc.data().seasonId === seasonId) {
+      batch.delete(gDoc.ref);
+    }
+  });
+  batch.delete(doc(db, "teams", teamId, "seasons", seasonId));
+  await batch.commit();
+}

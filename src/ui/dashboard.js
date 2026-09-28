@@ -9,6 +9,7 @@ import {
   updatePlay, updateGame,
 } from "../db.js";
 import { renderGame, buildHeatMap, buildRedZone, exportCSV, exportHudl, csvRow, downloadFile } from "./game.js";
+import { checkLicensed, activateLicense, TRIAL_GAME_LIMIT, TRIAL_PLAY_LIMIT, TIER_MAX_COACHES, TIER_LABELS } from "../license.js";
 
 // ── Hudl CSV roster import helper ────────────────────────────────────────────
 
@@ -41,20 +42,31 @@ function importHudlRosterCSV(text, existingRoster) {
   return added;
 }
 
+// ── Trial / license helpers ───────────────────────────────────────────────────
+
+function trialBanner() {
+  return `<div style="background:#FEF3C7;border:1px solid #D97706;border-radius:10px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px;font-size:13px;color:#92400E">
+    <span style="font-size:20px">🔒</span>
+    <div>
+      <b>Trial mode</b> &mdash; limited to ${TRIAL_GAME_LIMIT} games and ${TRIAL_PLAY_LIMIT} plays per game.
+      Enter a license key in <b>Settings &rsaquo; License</b> to unlock.
+    </div>
+  </div>`;
+}
+
+function fmtDate(ts) {
+  if (!ts) return "—";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 export async function renderDashboard(container, user, teamId, userRole, onRefresh) {
-  let team;
-  try {
-    team = await getTeam(teamId);
-  } catch (err) {
-    console.error("getTeam failed:", err);
-    team = null;
-  }
-  const teamName = team?.name || "My Team";
   const isAdmin  = userRole === "admin";
   const canChart = userRole !== "readonly";
 
+  // Render the shell immediately — no waiting for Firestore
   container.innerHTML = `
     <div class="dash-wrap">
       <header class="dash-header">
@@ -78,8 +90,8 @@ export async function renderDashboard(container, user, teamId, userRole, onRefre
           </svg>
         </div>
         <div class="dash-header-right">
-          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.2.2</span>
-          <span class="coach-email" id="headerTeamName">${esc(teamName)}</span>
+          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.4.4</span>
+          <span class="coach-email" id="headerTeamName">&hellip;</span>
           <span class="role-badge role-${userRole}">${roleName(userRole)}</span>
           ${isAdmin
             ? `<button id="settingsBtn" class="btn-ghost">&#9881; Settings</button>`
@@ -90,6 +102,7 @@ export async function renderDashboard(container, user, teamId, userRole, onRefre
       </header>
 
       <main class="dash-main">
+        <div id="trialBannerSlot"></div>
         <div class="dash-top">
           <h2>Games</h2>
           ${canChart
@@ -103,31 +116,101 @@ export async function renderDashboard(container, user, teamId, userRole, onRefre
     </div>
   `;
 
+  // Wire handlers that don't need Firestore data
   document.getElementById("logoutBtn").addEventListener("click", () => logoutCoach());
-
   document.getElementById("seasonReviewBtn").addEventListener("click", () =>
     renderSeasonReview(container, user, teamId, userRole,
       () => renderDashboard(container, user, teamId, userRole, onRefresh))
   );
 
+  // Mutable license state — updated once fetches complete, captured by closures
+  let licensed = true;
+  let licenseObj = null;
+
   if (canChart) {
     document.getElementById("newGameBtn").addEventListener("click", () =>
-      showNewGameModal(container, user, teamId, userRole, onRefresh)
+      showNewGameModal(container, user, teamId, userRole, onRefresh, licensed)
     );
   }
-
   if (isAdmin) {
     document.getElementById("settingsBtn").addEventListener("click", () =>
-      showSettingsModal(container, teamId, user, onRefresh)
+      showSettingsModal(container, teamId, user, userRole, onRefresh, licensed, licenseObj)
     );
   }
 
-  await refreshGameList(container, user, teamId, userRole, onRefresh);
+  // Fetch team name, license state, and games all in parallel
+  const [teamResult, licenseResult, _games] = await Promise.allSettled([
+    getTeam(teamId),
+    checkLicensed(teamId),
+    refreshGameList(container, user, teamId, userRole, onRefresh, true), // games load with optimistic licensed=true
+  ]);
+
+  // Update team name
+  const team = teamResult.status === "fulfilled" ? teamResult.value : null;
+  const teamNameEl = document.getElementById("headerTeamName");
+  if (teamNameEl) teamNameEl.textContent = team?.name || "My Team";
+
+  // Update license state
+  const ls = licenseResult.status === "fulfilled" ? licenseResult.value : { licensed: false };
+  licensed   = ls?.licensed ?? false;
+  licenseObj = ls?.license  ?? null;
+
+  // Show trial banner if needed (doesn't require a re-render of the whole list)
+  const bannerSlot = document.getElementById("trialBannerSlot");
+  if (!licensed && bannerSlot) bannerSlot.innerHTML = trialBanner();
+
+  // Warn once per session if license expires within 30 days
+  if (licensed && licenseObj?.expiresAt) {
+    const expiresDate = licenseObj.expiresAt.toDate ? licenseObj.expiresAt.toDate() : new Date(licenseObj.expiresAt);
+    const daysLeft = Math.ceil((expiresDate - new Date()) / (1000 * 60 * 60 * 24));
+    if (daysLeft <= 30 && daysLeft > 0 && !sessionStorage.getItem("expiry-warned")) {
+      sessionStorage.setItem("expiry-warned", "1");
+      showExpiryWarning(daysLeft, expiresDate);
+    }
+  }
+}
+
+function showExpiryWarning(daysLeft, expiresDate) {
+  const fmt = expiresDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const overlay = document.createElement("div");
+  overlay.style.cssText = [
+    "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999",
+    "display:flex;align-items:center;justify-content:center;padding:24px",
+  ].join(";");
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:28px 28px 24px;max-width:380px;width:100%;
+                box-shadow:0 8px 40px rgba(0,0,0,.25);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+      <div style="font-size:32px;text-align:center;margin-bottom:12px">⚠️</div>
+      <h2 style="margin:0 0 10px;font-size:18px;font-weight:700;color:#92400E;text-align:center">
+        License Expiring Soon
+      </h2>
+      <p style="margin:0 0 20px;font-size:14px;color:#374151;text-align:center;line-height:1.5">
+        Your SnapChart Pro license expires in <b>${daysLeft} day${daysLeft === 1 ? "" : "s"}</b>
+        on <b>${fmt}</b>.<br><br>
+        Contact SidelineLabz to renew and avoid losing access.
+      </p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <a href="mailto:info@sidelinelabz.com?subject=SnapChart Pro License Renewal"
+           style="display:block;text-align:center;padding:11px;background:#16317F;color:#fff;
+                  border-radius:9px;font-size:14px;font-weight:700;text-decoration:none">
+          Contact SidelineLabz
+        </a>
+        <button id="expiryDismiss"
+          style="width:100%;padding:10px;background:#F3F4F6;color:#374151;border:none;
+                 border-radius:9px;font-size:14px;font-weight:600;cursor:pointer">
+          Remind me later
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector("#expiryDismiss").addEventListener("click", () => document.body.removeChild(overlay));
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) document.body.removeChild(overlay); });
 }
 
 // ── Game list ─────────────────────────────────────────────────────────────────
 
-async function refreshGameList(container, user, teamId, userRole, onRefresh) {
+async function refreshGameList(container, user, teamId, userRole, onRefresh, licensed = true) {
   const list = document.getElementById("gameList");
   if (!list) return;
 
@@ -141,6 +224,7 @@ async function refreshGameList(container, user, teamId, userRole, onRefresh) {
   }
 
   const isAdmin  = userRole === "admin";
+  const atTrialLimit = !licensed && games.length >= TRIAL_GAME_LIMIT;
 
   if (!games.length) {
     list.innerHTML = `<div class="empty-state">No games yet.${
@@ -155,9 +239,10 @@ async function refreshGameList(container, user, teamId, userRole, onRefresh) {
       <div class="game-card-meta">${esc(g.date || "")}${g.date ? " &middot; " : ""}${esc(g.mode || "standard")}</div>
       <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
         <button class="btn-secondary open-game" data-id="${esc(g.id)}">Open</button>
-        ${isAdmin
-          ? `<button class="del-game icon-btn" data-id="${esc(g.id)}" title="Delete game">&times;</button>`
-          : ""}
+        ${isAdmin ? `
+          <button class="edit-game icon-btn" data-id="${esc(g.id)}" title="Edit game details">&#9998;</button>
+          <button class="del-game icon-btn" data-id="${esc(g.id)}" title="Delete game">&times;</button>
+        ` : ""}
       </div>
     </div>
   `).join("");
@@ -165,11 +250,21 @@ async function refreshGameList(container, user, teamId, userRole, onRefresh) {
   list.querySelectorAll(".open-game").forEach((btn) => {
     const game = games.find((g) => g.id === btn.dataset.id);
     btn.addEventListener("click", () =>
-      loadGame(container, user, teamId, game, userRole, onRefresh)
+      loadGame(container, user, teamId, game, userRole, onRefresh, licensed)
     );
   });
 
   if (isAdmin) {
+    list.querySelectorAll(".edit-game").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const game = games.find((g) => g.id === btn.dataset.id);
+        showEditGameModal(game, teamId, () =>
+          refreshGameList(container, user, teamId, userRole, onRefresh, licensed)
+        );
+      });
+    });
+
     list.querySelectorAll(".del-game").forEach((btn) => {
       btn.addEventListener("click", async (e) => {
         e.stopPropagation();
@@ -185,11 +280,75 @@ async function refreshGameList(container, user, teamId, userRole, onRefresh) {
   }
 }
 
-async function loadGame(container, user, teamId, game, userRole, onRefresh) {
+function dateToISO(str) {
+  if (!str) return "";
+  const d = new Date(str);
+  if (isNaN(d)) return "";
+  const yyyy = d.getFullYear();
+  const mm   = String(d.getMonth() + 1).padStart(2, "0");
+  const dd   = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function dateFromISO(iso) {
+  if (!iso) return "";
+  const d = new Date(iso + "T12:00:00"); // noon avoids DST/timezone shift
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function showEditGameModal(game, teamId, onSaved) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-back";
+  overlay.innerHTML = `
+    <div class="modal">
+      <h2>Edit Game</h2>
+      <div class="form-field" style="margin-bottom:14px">
+        <label>Opponent</label>
+        <input id="egOpponent" type="text" value="${esc(game.opponent || "")}" placeholder="e.g. Rival High" autocomplete="off">
+      </div>
+      <div class="form-field" style="margin-bottom:14px">
+        <label>Date</label>
+        <input id="egDate" type="date" value="${esc(dateToISO(game.date))}"
+          style="font-size:16px;padding:10px 12px;width:100%;border:1.5px solid #d1d5db;border-radius:8px">
+      </div>
+      <div style="display:flex;gap:10px;margin-top:4px">
+        <button class="btn-primary" id="egSave">Save</button>
+        <button class="modal-cancel" id="egCancel">Cancel</button>
+      </div>
+      <div id="egErr" style="color:#DC2626;font-size:13px;margin-top:8px"></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector("#egCancel").addEventListener("click", () =>
+    document.body.removeChild(overlay)
+  );
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) document.body.removeChild(overlay);
+  });
+
+  overlay.querySelector("#egSave").addEventListener("click", async () => {
+    const opponent = overlay.querySelector("#egOpponent").value.trim();
+    const date     = dateFromISO(overlay.querySelector("#egDate").value);
+    const saveBtn  = overlay.querySelector("#egSave");
+    const errEl    = overlay.querySelector("#egErr");
+    saveBtn.disabled = true;
+    try {
+      await updateGame(teamId, game.id, { opponent, date });
+      document.body.removeChild(overlay);
+      onSaved();
+    } catch (err) {
+      errEl.textContent = "Could not save: " + err.message;
+      saveBtn.disabled = false;
+    }
+  });
+}
+
+async function loadGame(container, user, teamId, game, userRole, onRefresh, licensed = true) {
   let teamSettings = {};
   try {
     const t = await getTeam(teamId);
-    // Merge top-level player-tracking fields + nested settings
     teamSettings = {
       ...(t?.settings || {}),
       trackPlayers: t?.trackPlayers || false,
@@ -198,13 +357,14 @@ async function loadGame(container, user, teamId, game, userRole, onRefresh) {
     };
   } catch (_) {}
   renderGame(container, user, teamId, game, userRole, teamSettings, () =>
-    renderDashboard(container, user, teamId, userRole, onRefresh)
+    renderDashboard(container, user, teamId, userRole, onRefresh),
+    licensed
   );
 }
 
 // ── New game modal ─────────────────────────────────────────────────────────────
 
-function showNewGameModal(container, user, teamId, userRole, onRefresh) {
+function showNewGameModal(container, user, teamId, userRole, onRefresh, licensed = true) {
   const overlay = document.createElement("div");
   overlay.className = "modal-back";
   overlay.innerHTML = `
@@ -235,6 +395,14 @@ function showNewGameModal(container, user, teamId, userRole, onRefresh) {
 
   overlay.querySelectorAll(".mode-pick").forEach((btn) => {
     btn.addEventListener("click", async () => {
+      if (!licensed) {
+        const games = await getGames(teamId);
+        if (games.length >= TRIAL_GAME_LIMIT) {
+          document.body.removeChild(overlay);
+          alert(`Trial mode is limited to ${TRIAL_GAME_LIMIT} games.\n\nEnter a license key in Settings → License to unlock unlimited games.`);
+          return;
+        }
+      }
       const mode     = btn.getAttribute("data-mode");
       const opponent = (overlay.querySelector("#ngOpponent").value || "").trim();
       const date     = new Date().toLocaleDateString("en-US",
@@ -243,7 +411,7 @@ function showNewGameModal(container, user, teamId, userRole, onRefresh) {
       try {
         const gameId = await createGame(teamId, { opponent, date, mode });
         loadGame(container, user, teamId, { id: gameId, opponent, date, mode },
-                 userRole, onRefresh);
+                 userRole, onRefresh, licensed);
       } catch (err) {
         console.error("createGame failed:", err);
         alert("Could not create game: " + err.message);
@@ -261,7 +429,7 @@ function showNewGameModal(container, user, teamId, userRole, onRefresh) {
 
 // ── Settings modal (admin only) ───────────────────────────────────────────────
 
-async function showSettingsModal(container, teamId, user, onRefresh) {
+async function showSettingsModal(container, teamId, user, userRole, onRefresh, licensed = true, licenseObj = null) {
   const team = await getTeam(teamId);
   const teamSettings = {
     ...(team?.settings || {}),
@@ -315,6 +483,7 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
           <button class="snav-btn" data-pane="team">Team</button>
           <button class="snav-btn" data-pane="data">Data</button>
           <button class="snav-btn" data-pane="bugfixes">Bug Fixes</button>
+          <button class="snav-btn" data-pane="license">License</button>
           <button id="settingsClose" class="snav-close">&#x2715; Close</button>
         </nav>
         <div class="settings-content">
@@ -564,6 +733,32 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
             </div>
           </div>
 
+          <div class="settings-pane" data-pane="license" hidden>
+            <h3 style="margin:0 0 4px;font-size:15px">License</h3>
+            ${licensed && licenseObj ? (() => {
+              const tier = licenseObj.tier || 3;
+              const tierLabel = TIER_LABELS[tier] || "";
+              return `
+              <div style="background:#D1FAE5;border:1px solid #6EE7B7;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#065F46">
+                <b>&#10003; Licensed</b> &mdash; ${esc(licenseObj.issuedTo?.organization || licenseObj.issuedTo?.name || "")}<br>
+                Plan: <b>${esc(tierLabel)}</b><br>
+                Expires <b>${fmtDate(licenseObj.expiresAt)}</b>
+              </div>`;
+            })() : `
+              <div style="background:#FEF3C7;border:1px solid #D97706;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#92400E">
+                <b>Trial mode</b> &mdash; ${TRIAL_GAME_LIMIT} games, ${TRIAL_PLAY_LIMIT} plays per game.
+              </div>
+            `}
+            <div class="settings-label">Activate License Key</div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+              <input id="licKeyInput" type="text" placeholder="SNAP-XXXX-XXXX-XXXX"
+                style="flex:1;font-family:var(--num);letter-spacing:.05em;text-transform:uppercase"
+                autocomplete="off" spellcheck="false">
+              <button class="btn-primary" id="licActivateBtn">Activate</button>
+            </div>
+            <div id="licMsg" style="font-size:13px;min-height:20px"></div>
+          </div>
+
         </div>
       </div>
     </div>
@@ -575,6 +770,40 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
   );
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) document.body.removeChild(overlay);
+  });
+
+  // License key auto-format: SNAP-XXXX-XXXX-XXXX
+  overlay.querySelector("#licKeyInput").addEventListener("input", (e) => {
+    const el = e.target;
+    const raw = el.value.replace(/[^A-Z0-9]/gi, "").toUpperCase().slice(0, 16);
+    const formatted = (raw.match(/.{1,4}/g) || []).join("-");
+    const caretAt = formatted.length; // always put caret at end after format
+    el.value = formatted;
+    el.setSelectionRange(caretAt, caretAt);
+  });
+
+  // License activation
+  overlay.querySelector("#licActivateBtn").addEventListener("click", async () => {
+    const key = overlay.querySelector("#licKeyInput").value.trim();
+    const msg = overlay.querySelector("#licMsg");
+    const btn = overlay.querySelector("#licActivateBtn");
+    msg.textContent = "Activating…";
+    msg.style.color = "var(--slate)";
+    btn.disabled = true;
+    try {
+      const result = await activateLicense(user.uid, teamId, key);
+      msg.textContent = `✓ License activated! Expires ${fmtDate(result.license.expiresAt)}.`;
+      msg.style.color = "#065F46";
+      // Refresh dashboard so licensed state updates
+      setTimeout(async () => {
+        document.body.removeChild(overlay);
+        await renderDashboard(container, user, teamId, userRole, onRefresh);
+      }, 1500);
+    } catch (err) {
+      msg.textContent = err.message;
+      msg.style.color = "#DC2626";
+      btn.disabled = false;
+    }
   });
 
   // Settings nav switching
@@ -852,6 +1081,23 @@ async function showSettingsModal(container, teamId, user, onRefresh) {
     msgEl.style.display = "none";
 
     try {
+      // Enforce tier coach limit before sending invite
+      if (licensed && licenseObj) {
+        const tier = licenseObj.tier || 3;
+        const maxCoaches = TIER_MAX_COACHES[tier] ?? Infinity;
+        if (maxCoaches !== Infinity) {
+          const currentMembers = await getMembers(teamId);
+          if (currentMembers.length >= maxCoaches) {
+            msgEl.style.color = "#DC2626";
+            msgEl.textContent = `Your license plan allows up to ${maxCoaches} coaches. Remove a coach or upgrade your plan to add more.`;
+            msgEl.style.display = "block";
+            btn.disabled = false;
+            btn.textContent = "Invite";
+            return;
+          }
+        }
+      }
+
       const t = await getTeam(teamId);
       await inviteCoach(email, role, teamId, t?.name || "", user.email);
       overlay.querySelector("#inviteEmail").value = "";

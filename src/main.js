@@ -39,6 +39,58 @@ function showSplash() {
   });
 }
 
+// ── Service worker registration & update toast ────────────────────────────────
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", async () => {
+    try {
+      const reg = await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
+
+      function offerUpdate(worker) {
+        const toast = document.createElement("div");
+        toast.style.cssText = [
+          "position:fixed;bottom:24px;left:50%;transform:translateX(-50%)",
+          "background:#16317F;color:#fff;padding:12px 20px;border-radius:12px",
+          "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+          "font-size:14px;font-weight:600;display:flex;align-items:center;gap:12px",
+          "box-shadow:0 4px 24px rgba(0,0,0,.35);z-index:99999;white-space:nowrap",
+        ].join(";");
+        toast.innerHTML = `
+          <span>&#128640; Update available</span>
+          <button style="background:#F59E0B;color:#000;border:none;border-radius:7px;
+            padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer">
+            Update now
+          </button>`;
+        document.body.appendChild(toast);
+        toast.querySelector("button").addEventListener("click", () => {
+          worker.postMessage("skipWaiting");
+          toast.remove();
+        });
+      }
+
+      // New SW already waiting (e.g. hard reload after deploy)
+      if (reg.waiting) offerUpdate(reg.waiting);
+
+      // New SW installs while page is open
+      reg.addEventListener("updatefound", () => {
+        const nw = reg.installing;
+        nw.addEventListener("statechange", () => {
+          if (nw.state === "installed" && navigator.serviceWorker.controller) {
+            offerUpdate(nw);
+          }
+        });
+      });
+
+      // When the new SW takes control, reload to run the latest code
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (!refreshing) { refreshing = true; window.location.reload(); }
+      });
+    } catch (err) {
+      console.warn("SW registration failed:", err);
+    }
+  });
+}
+
 // Show splash immediately on load, before auth resolves
 showSplash();
 const splashShownAt = Date.now();

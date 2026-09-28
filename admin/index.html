@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SnapChart Pro — License Admin</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f3f4f6; color: #111827; min-height: 100vh; }
+    header { background: #16317F; color: #fff; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 20px; font-weight: 700; letter-spacing: .02em; }
+    #userInfo { font-size: 13px; opacity: .8; }
+    #loginScreen { max-width: 380px; margin: 80px auto; background: #fff; border-radius: 16px; padding: 32px; box-shadow: 0 4px 24px rgba(0,0,0,.10); }
+    #loginScreen h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+    #loginScreen p { font-size: 13px; color: #6b7280; margin-bottom: 24px; }
+    .field { margin-bottom: 16px; }
+    label { display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 4px; }
+    input { width: 100%; padding: 10px 12px; border: 1.5px solid #d1d5db; border-radius: 8px; font-size: 14px; outline: none; }
+    input:focus { border-color: #16317F; }
+    button.primary { width: 100%; padding: 11px; background: #16317F; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    button.primary:hover { background: #1E44C4; }
+    button.primary:disabled { opacity: .5; cursor: default; }
+    #adminScreen { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+    .card { background: #fff; border-radius: 14px; padding: 24px; margin-bottom: 24px; box-shadow: 0 1px 6px rgba(0,0,0,.06); }
+    .card h2 { font-size: 16px; font-weight: 700; margin-bottom: 16px; color: #16317F; }
+    .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+    .gen-actions { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+    button.sm { padding: 8px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
+    button.sm.blue { background: #16317F; color: #fff; }
+    button.sm.blue:hover { background: #1E44C4; }
+    button.sm.red { background: #DC2626; color: #fff; }
+    button.sm.red:hover { background: #B91C1C; }
+    button.sm.gray { background: #e5e7eb; color: #374151; }
+    button.sm.gray:hover { background: #d1d5db; }
+    #genResult { font-family: monospace; font-size: 15px; font-weight: 700; letter-spacing: .08em; color: #16317F; padding: 8px 12px; background: #EFF6FF; border-radius: 7px; display: none; }
+    #genMsg { font-size: 13px; color: #065F46; margin-top: 6px; display: none; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; border-bottom: 2px solid #e5e7eb; }
+    td { padding: 10px 10px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 700; }
+    .badge.active { background: #D1FAE5; color: #065F46; }
+    .badge.available { background: #DBEAFE; color: #1D4ED8; }
+    .badge.revoked { background: #FEE2E2; color: #DC2626; }
+    .badge.expired { background: #FEF3C7; color: #B45309; }
+    .mono { font-family: monospace; font-size: 12px; letter-spacing: .04em; }
+    #loadMsg { text-align: center; color: #6b7280; font-size: 14px; padding: 32px 0; }
+    #errMsg { color: #DC2626; font-size: 13px; margin-top: 8px; min-height: 18px; }
+    .copy-btn { background: none; border: 1px solid #d1d5db; border-radius: 5px; padding: 2px 7px; font-size: 11px; cursor: pointer; color: #6b7280; }
+    .copy-btn:hover { background: #f3f4f6; }
+    .filter-row { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
+    .filter-row input { width: 220px; padding: 8px 10px; font-size: 13px; }
+    .filter-row select { padding: 8px 10px; border: 1.5px solid #d1d5db; border-radius: 8px; font-size: 13px; }
+    .logout-btn { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3); color: #fff; border-radius: 7px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+    .logout-btn:hover { background: rgba(255,255,255,.25); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>SnapChart Pro &mdash; License Admin</h1>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span id="userInfo"></span>
+    <button class="logout-btn" id="logoutBtn" style="display:none">Sign out</button>
+  </div>
+</header>
+
+<div id="loginScreen">
+  <h2>Admin Login</h2>
+  <p>Sign in with your SidelineLabz admin account.</p>
+  <div class="field"><label>Email</label><input id="emailIn" type="email" placeholder="rick@mjm.com" autocomplete="email"></div>
+  <div class="field"><label>Password</label><input id="passIn" type="password" autocomplete="current-password"></div>
+  <div id="errMsg"></div>
+  <br>
+  <button class="primary" id="loginBtn">Sign In</button>
+</div>
+
+<div id="adminScreen" style="display:none">
+
+  <div class="card">
+    <h2>Generate New License Key</h2>
+    <div class="row3">
+      <div class="field"><label>Organization / Team</label><input id="genOrg" type="text" placeholder="Riverdale High Football"></div>
+      <div class="field"><label>Contact Name</label><input id="genName" type="text" placeholder="Coach Smith"></div>
+      <div class="field"><label>Contact Email</label><input id="genEmail" type="email" placeholder="coach@school.edu"></div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>License Tier</label>
+        <select id="genTier" style="width:100%;padding:10px 12px;border:1.5px solid #d1d5db;border-radius:8px;font-size:14px">
+          <option value="1">Tier 1 — up to 3 coaches</option>
+          <option value="2">Tier 2 — up to 6 coaches</option>
+          <option value="3">Tier 3 — unlimited coaches</option>
+        </select>
+      </div>
+      <div class="field"><label>Notes (optional)</label><input id="genNotes" type="text" placeholder="Purchased via website, $99"></div>
+    </div>
+    <div class="gen-actions">
+      <button class="sm blue" id="genBtn">Generate &amp; Save Key</button>
+      <div id="genResult"></div>
+      <button class="copy-btn" id="copyBtn" style="display:none">Copy</button>
+    </div>
+    <div id="genMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>All License Keys</h2>
+    <div class="filter-row">
+      <input id="searchIn" type="text" placeholder="Search org, name, email, key…">
+      <select id="statusFilter">
+        <option value="">All statuses</option>
+        <option value="available">Available</option>
+        <option value="active">Active</option>
+        <option value="expired">Expired</option>
+        <option value="revoked">Revoked</option>
+      </select>
+      <button class="sm gray" id="refreshBtn">&#8635; Refresh</button>
+    </div>
+    <div id="loadMsg">Loading…</div>
+    <table id="licTable" style="display:none">
+      <thead><tr>
+        <th>Key</th>
+        <th>Organization</th>
+        <th>Contact</th>
+        <th>Tier</th>
+        <th>Status</th>
+        <th>Activated</th>
+        <th>Expires</th>
+        <th>Created</th>
+        <th></th>
+      </tr></thead>
+      <tbody id="licBody"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+  import {
+    getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+  import {
+    getFirestore, collection, getDocs, doc, setDoc, updateDoc,
+    query, orderBy, Timestamp
+  } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+  const ADMIN_EMAIL = "rcatalano1@gmail.com";
+
+  const firebaseConfig = {
+    apiKey:            "AIzaSyBGvR8-X8fHm3qVuzu4gFh3JKoVVeGYgVo",
+    authDomain:        "snapchartpro.firebaseapp.com",
+    projectId:         "snapchartpro",
+    storageBucket:     "snapchartpro.firebasestorage.app",
+    messagingSenderId: "767385141168",
+    appId:             "1:767385141168:web:1353d5db4f1ad13c972075",
+  };
+
+  const app  = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
+
+  // ── helpers ──────────────────────────────────────────────────────────────────
+
+  function generateKey() {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I, O, 0, 1 for readability
+    const rand = new Uint8Array(12);
+    crypto.getRandomValues(rand);
+    let s = "";
+    for (let i = 0; i < 12; i++) {
+      if (i > 0 && i % 4 === 0) s += "-";
+      s += chars[rand[i] % chars.length];
+    }
+    return "SNAP-" + s;
+  }
+
+  function fmtDate(ts) {
+    if (!ts) return "—";
+    const d = ts.toDate ? ts.toDate() : new Date(ts.seconds * 1000);
+    return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  }
+
+  function statusOf(lic) {
+    if (lic.status === "revoked") return "revoked";
+    if (!lic.activatedBy) return "available";
+    if (lic.expiresAt && (lic.expiresAt.toDate ? lic.expiresAt.toDate() : new Date(lic.expiresAt.seconds * 1000)) < new Date()) return "expired";
+    return "active";
+  }
+
+  function esc(s) { return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+  // ── auth ─────────────────────────────────────────────────────────────────────
+
+  let allLicenses = [];
+
+  onAuthStateChanged(auth, (user) => {
+    if (user && user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      document.getElementById("loginScreen").style.display = "none";
+      document.getElementById("adminScreen").style.display = "";
+      document.getElementById("userInfo").textContent = user.email;
+      document.getElementById("logoutBtn").style.display = "";
+      loadLicenses();
+    } else if (user) {
+      signOut(auth);
+      document.getElementById("errMsg").textContent = "Access denied: not an admin account.";
+    } else {
+      document.getElementById("loginScreen").style.display = "";
+      document.getElementById("adminScreen").style.display = "none";
+      document.getElementById("logoutBtn").style.display = "none";
+      document.getElementById("userInfo").textContent = "";
+    }
+  });
+
+  document.getElementById("loginBtn").addEventListener("click", async () => {
+    const email = document.getElementById("emailIn").value.trim();
+    const pass  = document.getElementById("passIn").value;
+    const errEl = document.getElementById("errMsg");
+    const btn   = document.getElementById("loginBtn");
+    errEl.textContent = "";
+    btn.disabled = true;
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
+    } catch (e) {
+      errEl.textContent = e.message;
+      btn.disabled = false;
+    }
+  });
+  document.getElementById("passIn").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("loginBtn").click(); });
+  document.getElementById("logoutBtn").addEventListener("click", () => signOut(auth));
+
+  // ── generate ─────────────────────────────────────────────────────────────────
+
+  const TIER_MAX = { "1": 3, "2": 6, "3": null }; // null = unlimited
+  const TIER_LABEL = { "1": "Tier 1 (1–3 coaches)", "2": "Tier 2 (4–6 coaches)", "3": "Tier 3 (6+ coaches)" };
+
+  document.getElementById("genBtn").addEventListener("click", async () => {
+    const org   = document.getElementById("genOrg").value.trim();
+    const name  = document.getElementById("genName").value.trim();
+    const email = document.getElementById("genEmail").value.trim();
+    const notes = document.getElementById("genNotes").value.trim();
+    const tier  = document.getElementById("genTier").value;
+    const msg   = document.getElementById("genMsg");
+    const res   = document.getElementById("genResult");
+    const cpBtn = document.getElementById("copyBtn");
+
+    if (!org) { msg.textContent = "Organization is required."; msg.style.color = "#DC2626"; msg.style.display = ""; return; }
+
+    const key = generateKey();
+    const maxCoaches = TIER_MAX[tier];
+    try {
+      await setDoc(doc(db, "licenses", key), {
+        status: "available",
+        tier: parseInt(tier, 10),
+        maxCoaches: maxCoaches,
+        issuedTo: { organization: org, name, email },
+        notes,
+        activatedTeam: null,
+        activatedBy: null,
+        activatedAt: null,
+        expiresAt: null,
+        createdAt: Timestamp.now(),
+      });
+      res.textContent = key;
+      res.style.display = "";
+      cpBtn.style.display = "";
+      msg.textContent = `✓ Key saved for ${org}`;
+      msg.style.color = "#065F46";
+      msg.style.display = "";
+      document.getElementById("genOrg").value = "";
+      document.getElementById("genName").value = "";
+      document.getElementById("genEmail").value = "";
+      document.getElementById("genNotes").value = "";
+      loadLicenses();
+    } catch (e) {
+      msg.textContent = "Error: " + e.message;
+      msg.style.color = "#DC2626";
+      msg.style.display = "";
+    }
+  });
+
+  document.getElementById("copyBtn").addEventListener("click", () => {
+    const key = document.getElementById("genResult").textContent;
+    navigator.clipboard.writeText(key).then(() => {
+      document.getElementById("copyBtn").textContent = "Copied!";
+      setTimeout(() => { document.getElementById("copyBtn").textContent = "Copy"; }, 1500);
+    });
+  });
+
+  // ── load & render ─────────────────────────────────────────────────────────────
+
+  document.getElementById("refreshBtn").addEventListener("click", loadLicenses);
+  document.getElementById("searchIn").addEventListener("input", renderTable);
+  document.getElementById("statusFilter").addEventListener("change", renderTable);
+
+  async function loadLicenses() {
+    document.getElementById("loadMsg").textContent = "Loading…";
+    document.getElementById("loadMsg").style.display = "";
+    document.getElementById("licTable").style.display = "none";
+    try {
+      const snap = await getDocs(query(collection(db, "licenses"), orderBy("createdAt", "desc")));
+      allLicenses = snap.docs.map(d => ({ _key: d.id, ...d.data() }));
+      renderTable();
+    } catch (e) {
+      document.getElementById("loadMsg").textContent = "Error loading: " + e.message;
+    }
+  }
+
+  function renderTable() {
+    const search = document.getElementById("searchIn").value.toLowerCase();
+    const filter = document.getElementById("statusFilter").value;
+    const tbody  = document.getElementById("licBody");
+    const table  = document.getElementById("licTable");
+    const loadMsg = document.getElementById("loadMsg");
+
+    const rows = allLicenses.filter(l => {
+      const st = statusOf(l);
+      if (filter && st !== filter) return false;
+      if (!search) return true;
+      return [l._key, l.issuedTo?.organization, l.issuedTo?.name, l.issuedTo?.email, l.notes]
+        .some(v => String(v || "").toLowerCase().includes(search));
+    });
+
+    if (!rows.length) {
+      table.style.display = "none";
+      loadMsg.textContent = allLicenses.length ? "No keys match your filter." : "No license keys yet.";
+      loadMsg.style.display = "";
+      return;
+    }
+
+    loadMsg.style.display = "none";
+    table.style.display = "";
+    tbody.innerHTML = rows.map(l => {
+      const st = statusOf(l);
+      const tierNum = l.tier ? String(l.tier) : "";
+      const tierStr = tierNum ? TIER_LABEL[tierNum] || ("Tier " + tierNum) : "—";
+      return `<tr>
+        <td class="mono">${esc(l._key)} <button class="copy-btn" onclick="navigator.clipboard.writeText('${esc(l._key)}')">Copy</button></td>
+        <td><b>${esc(l.issuedTo?.organization)}</b></td>
+        <td>${esc(l.issuedTo?.name)}<br><span style="color:#6b7280;font-size:11px">${esc(l.issuedTo?.email)}</span></td>
+        <td style="font-size:12px">${esc(tierStr)}</td>
+        <td><span class="badge ${st}">${st}</span></td>
+        <td style="font-size:12px">${l.activatedTeam ? fmtDate(l.activatedAt) : (l.activatedBy ? fmtDate(l.activatedAt) : "—")}<br><span style="color:#6b7280;font-size:11px">${l.activatedTeam ? "team: " + l.activatedTeam.slice(0, 10) + "…" : (l.activatedBy ? "uid: " + l.activatedBy.slice(0, 10) + "…" : "")}</span></td>
+        <td style="font-size:12px">${fmtDate(l.expiresAt)}</td>
+        <td style="font-size:12px;color:#6b7280">${fmtDate(l.createdAt)}</td>
+        <td>
+          ${st !== "revoked"
+            ? `<button class="sm red" onclick="revokeKey('${esc(l._key)}')">Revoke</button>`
+            : `<button class="sm gray" onclick="reinstateKey('${esc(l._key)}')">Reinstate</button>`}
+        </td>
+      </tr>`;
+    }).join("");
+  }
+
+  // ── revoke / reinstate ────────────────────────────────────────────────────────
+
+  window.revokeKey = async (key) => {
+    if (!confirm(`Revoke key ${key}?\n\nThe user will lose access immediately.`)) return;
+    try {
+      await updateDoc(doc(db, "licenses", key), { status: "revoked" });
+      allLicenses = allLicenses.map(l => l._key === key ? { ...l, status: "revoked" } : l);
+      renderTable();
+    } catch (e) { alert("Error: " + e.message); }
+  };
+
+  window.reinstateKey = async (key) => {
+    if (!confirm(`Reinstate key ${key}?`)) return;
+    try {
+      await updateDoc(doc(db, "licenses", key), { status: "active" });
+      allLicenses = allLicenses.map(l => l._key === key ? { ...l, status: "active" } : l);
+      renderTable();
+    } catch (e) { alert("Error: " + e.message); }
+  };
+</script>
+</body>
+</html>

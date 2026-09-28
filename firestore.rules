@@ -2,20 +2,150 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // userTeams/{uid} — only the owner can read/write their own lookup doc
+    // ── Helpers ─────────────────────────────────────────────────────────────
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function memberRef(teamId) {
+      return /databases/$(database)/documents/teams/$(teamId)/members/$(request.auth.uid);
+    }
+
+    function isMember(teamId) {
+      return signedIn() && exists(memberRef(teamId));
+    }
+
+    function memberRole(teamId) {
+      return get(memberRef(teamId)).data.role;
+    }
+
+    function isEditor(teamId) {
+      return isMember(teamId) && memberRole(teamId) in ["admin", "editor"];
+    }
+
+    function isAdmin(teamId) {
+      return isMember(teamId) && memberRole(teamId) == "admin";
+    }
+
+    function isTeamOwner(teamId) {
+      return signedIn() &&
+        get(/databases/$(database)/documents/teams/$(teamId)).data.ownerUid == request.auth.uid;
+    }
+
+    // ── userTeams/{uid} — personal team-lookup doc, owner only ───────────────
+
     match /userTeams/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if signedIn() && request.auth.uid == uid;
     }
 
-    // Everything under teams/{teamId} requires a signed-in user.
-    // Role enforcement (admin / editor / readonly) is handled in app code.
-    match /teams/{teamId}/{document=**} {
-      allow read, write: if request.auth != null;
+    // ── teams/{teamId} — team root document ──────────────────────────────────
+
+    match /teams/{teamId} {
+      allow read:   if isMember(teamId);
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isAdmin(teamId);
+      allow delete: if false;
     }
 
-    // Invites — any signed-in user can read/write (key is obscured by emailKey encoding)
+    // ── teams/{teamId}/members/{memberId} ────────────────────────────────────
+
+    match /teams/{teamId}/members/{memberId} {
+      allow read: if isMember(teamId);
+
+      allow create: if signedIn() && (
+        // Team owner adding themselves as first admin during createTeamWithAdmin
+        (request.auth.uid == memberId && isTeamOwner(teamId)) ||
+        // Existing admin inviting/accepting a coach
+        isAdmin(teamId) ||
+        // Invite acceptance: user creating their own (non-admin) member doc
+        (request.auth.uid == memberId &&
+         request.resource.data.role in ["editor", "readonly"])
+      );
+
+      allow update: if isAdmin(teamId);
+      allow delete: if isAdmin(teamId);
+    }
+
+    // ── teams/{teamId}/games/{gameId} ────────────────────────────────────────
+
+    match /teams/{teamId}/games/{gameId} {
+      allow read:          if isMember(teamId);
+      allow create, update: if isEditor(teamId);
+      allow delete:        if isAdmin(teamId);
+    }
+
+    // ── teams/{teamId}/games/{gameId}/plays/{playId} ─────────────────────────
+
+    match /teams/{teamId}/games/{gameId}/plays/{playId} {
+      allow read:          if isMember(teamId);
+      allow create, update: if isEditor(teamId);
+      allow delete:        if isEditor(teamId);
+    }
+
+    // ── teams/{teamId}/seasons/{seasonId} ────────────────────────────────────
+
+    match /teams/{teamId}/seasons/{seasonId} {
+      allow read:   if isMember(teamId);
+      allow create: if isEditor(teamId);
+      allow delete: if isAdmin(teamId);
+    }
+
+    // ── Catch-all for any other subcollections under a team ──────────────────
+
+    match /teams/{teamId}/{rest=**} {
+      allow read:  if isMember(teamId);
+      allow write: if isEditor(teamId);
+    }
+
+    // ── invites/{emailKey} ───────────────────────────────────────────────────
+    // Invites are stored at invites/{email-with-@-and-.-replaced-by-_}
+    // Only the invited user (by email) or an admin of the relevant team can access.
+
     match /invites/{emailKey} {
-      allow read, write: if request.auth != null;
+      allow read: if signedIn() && (
+        // Invited user reading their own invite
+        request.auth.token.email != null &&
+          request.auth.token.email.lower() == resource.data.email ||
+        // Team admin viewing their team's pending invites
+        isAdmin(resource.data.teamId)
+      );
+
+      allow create: if signedIn() && isAdmin(request.resource.data.teamId);
+
+      allow delete: if signedIn() && (
+        // Invited user declining/accepting
+        request.auth.token.email != null &&
+          request.auth.token.email.lower() == resource.data.email ||
+        // Admin cancelling invite
+        isAdmin(resource.data.teamId)
+      );
+
+      allow update: if false; // invites are immutable once created
     }
+
+    // ── licenses/{key} ───────────────────────────────────────────────────────
+
+    match /licenses/{key} {
+      allow read: if signedIn();
+
+      allow create, delete: if signedIn() &&
+        request.auth.token.email == 'rcatalano1@gmail.com';
+
+      allow update: if signedIn() && (
+        // Admin can change anything
+        request.auth.token.email == 'rcatalano1@gmail.com' ||
+        // User may activate an unactivated key — ONLY these two fields may change
+        (resource.data.activatedTeam == null &&
+         request.resource.data.activatedTeam is string &&
+         // Lock all other fields against user modification
+         request.resource.data.activatedBy   == request.auth.uid &&
+         request.resource.data.status        == resource.data.status &&
+         request.resource.data.tier          == resource.data.tier &&
+         request.resource.data.issuedTo      == resource.data.issuedTo &&
+         request.resource.data.expiresAt     == resource.data.expiresAt)
+      );
+    }
+
   }
 }

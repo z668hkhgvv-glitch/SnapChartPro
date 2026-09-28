@@ -616,8 +616,9 @@ tbody tr[data-id]:hover { background: #f8f9ff; }
   color: var(--royal); margin: 0; font-size: 20px;
 }
 .report-tabs {
-  display: flex; overflow-x: auto; padding: 0 24px;
+  display: flex; overflow-x: auto; overflow-y: hidden; padding: 0 24px;
   border-bottom: 2px solid var(--chalk); flex-shrink: 0; gap: 0;
+  touch-action: pan-x;
 }
 .rtab {
   font-family: var(--body); font-size: 13px; font-weight: 600;

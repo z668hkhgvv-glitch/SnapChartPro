@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "snapchartpro"
-  }
+  },
+  "targets": {
+    "snapchartpro": {
+      "hosting": {
+        "app": [
+          "snapchartpro"
+        ],
+        "admin": [
+          "snapchartpro-admin"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

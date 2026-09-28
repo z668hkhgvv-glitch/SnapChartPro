@@ -13,6 +13,7 @@ import {
   subscribePlays,
   updateGame,
 } from "../db.js";
+import { TRIAL_PLAY_LIMIT } from "../license.js";
 
 // Formation defaults (same as free app)
 const DEFAULT_FORMS = [
@@ -396,7 +397,7 @@ export function exportHudl(plays, game, teamSettings) {
 
 // ---------- public entry point -----------------------------------------------
 
-export function renderGame(container, user, teamId, game, userRole, teamSettings, onBack) {
+export function renderGame(container, user, teamId, game, userRole, teamSettings, onBack, licensed = true) {
   // Per-render state
   let plays = [];
   let editingId = null;
@@ -465,7 +466,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     note:      "",
   };
 
-  container.innerHTML = buildHTML(game, mode);
+  container.innerHTML = buildHTML(game, mode, canChart);
 
   // Populate result chips from team settings (or defaults)
   const DEFAULT_RESULT_TAGS = ["1st Down", "TD", "Incomplete", "Sack", "Penalty", "Turnover"];
@@ -1462,6 +1463,12 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     const addBtn = document.getElementById("addBtn");
     addBtn.disabled = true;
 
+    if (!licensed && !editingId && plays.length >= TRIAL_PLAY_LIMIT) {
+      alert(`Trial mode is limited to ${TRIAL_PLAY_LIMIT} plays per game.\n\nEnter a license key in Settings → License to unlock.`);
+      addBtn.disabled = false;
+      return;
+    }
+
     try {
       if (editingId) {
         await dbUpdatePlay(teamId, game.id, editingId, playData);
@@ -1540,6 +1547,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
           }
         }
         if (isScrim) updateScrimHint();
+        paintPuntBtn();
 
         // Change 4 — TD re-spot modal
         if (wasTouchdown) {
@@ -1705,6 +1713,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     document.getElementById("dist").value = newDist;
     const adv = advanceBallOn(pd.p.yl, pd.p.yards);
     if (adv) { document.getElementById("yl").value = adv.yl; draft.ylSign = adv.sign; paintYlSign(); }
+    paintPuntBtn();
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
 
@@ -1725,6 +1734,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     }
     const adv = advanceBallOn(pd.p.yl, pd.p.yards);
     if (adv) { document.getElementById("yl").value = adv.yl; draft.ylSign = adv.sign; paintYlSign(); }
+    paintPuntBtn();
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
 
@@ -1827,18 +1837,25 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   });
 
   // ---- toolbar ----
-  document.getElementById("exportCsvBtn").addEventListener("click", () => exportCSV(plays, game, teamSettings));
-  document.getElementById("exportHudlBtn").addEventListener("click", () => exportHudl(plays, game, teamSettings));
-  document.getElementById("printBtn").addEventListener("click", () => window.print());
-  document.getElementById("quickReportBtn").addEventListener("click", () => {
+  if (canChart) {
+    document.getElementById("exportCsvBtn").addEventListener("click", () => exportCSV(plays, game, teamSettings));
+    document.getElementById("exportHudlBtn").addEventListener("click", () => exportHudl(plays, game, teamSettings));
+    document.getElementById("printBtn").addEventListener("click", () => window.print());
+  }
+  document.getElementById("quickReportBtn")?.addEventListener("click", () => {
     document.getElementById("reportOverlay").hidden = false;
     document.querySelectorAll(".rtab").forEach((b, i) => b.classList.toggle("active", i === 0));
     renderReportTab("eff");
   });
   document.getElementById("reportClose").addEventListener("click", () => {
-    document.getElementById("reportOverlay").hidden = true;
+    if (!canChart) {
+      if (unsub) unsub();
+      onBack();
+    } else {
+      document.getElementById("reportOverlay").hidden = true;
+    }
   });
-  document.getElementById("reportPdfBtn").addEventListener("click", () => {
+  document.getElementById("reportPdfBtn")?.addEventListener("click", () => {
     const teamName  = teamSettings.name || "My Team";
     const opponent  = game.opponent ? "vs " + game.opponent : "";
     const gameDate  = game.date || "";
@@ -1871,7 +1888,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
         <td><span class="pill ${esc(p.type || "")}">${typeLbl}</span></td>
         <td>${esc(p.form || "&mdash;")}${motion}${front}${cov}</td>
         <td>${esc(p.call || "&mdash;")}${playerNote}</td>
-        <td class="num ${p.yards > 0 ? "pos" : p.yards < 0 ? "neg" : ""}">${sign}${p.yards}</td>
+        <td class="num ${p.yards > 0 ? "pos" : p.yards < 0 ? "neg" : ""}">${sign}${Number(p.yards)||0}</td>
         <td class="eff-cell">${p.success ? "✓" : "✗"}</td>
         <td class="small">${esc(tags)}</td>
         <td class="small">${note}</td>
@@ -2176,7 +2193,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
         <td>${p.yl != null && p.yl !== "" ? esc(String(p.yl)) : "&ndash;"}<span style="color:var(--slate);font-size:11px"> ${esc(p.hash || "")}</span></td>
         <td>${esc(p.form || "—")}</td>
         <td>${tags}</td>
-        <td><span class="res ${dir}">${sign}${p.yards}</span></td>
+        <td><span class="res ${dir}">${sign}${Number(p.yards)||0}</span></td>
         <td><span class="succ ${p.success ? "y" : "n"} static">${p.success ? "✓" : "✗"}</span></td>
       </tr>`;
     }).join("");
@@ -2383,7 +2400,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
             (p.coverage ? `<div class="mtag" style="color:var(--muted)">cov: ${esc(p.coverage)}</div>` : "") +
           `</td>` +
           `<td>${esc(p.call || "—")}${playerNote}</td>` +
-          `<td><span class="res ${dir}">${sign}${p.yards}</span></td>` +
+          `<td><span class="res ${dir}">${sign}${Number(p.yards)||0}</span></td>` +
           (canChart
             ? `<td><button class="succ ${p.success ? "y" : "n"}" data-id="${esc(p.id)}">${p.success ? "✓" : "✗"}</button></td>`
             : `<td><span class="${p.success ? "succ y static" : "succ n static"}">${p.success ? "✓" : "✗"}</span></td>`) +
@@ -2454,11 +2471,39 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     plays = newPlays;
     renderLog();
     renderStats();
+    if (!canChart) {
+      // Keep the inline report live as new plays arrive
+      const activeTab = document.querySelector(".rtab.active");
+      if (activeTab) renderReportTab(activeTab.dataset.tab);
+    }
     if (isScrim) updateScrimHint();
+    if (!licensed && canChart) {
+      const addBtn = document.getElementById("addBtn");
+      if (addBtn) {
+        const atLimit = plays.length >= TRIAL_PLAY_LIMIT;
+        addBtn.disabled = atLimit;
+        addBtn.title = atLimit
+          ? `Trial limit: ${TRIAL_PLAY_LIMIT} plays per game. Enter a license key in Settings → License to unlock.`
+          : "";
+      }
+      const trialEl = document.getElementById("trialPlayWarning");
+      if (trialEl) {
+        trialEl.hidden = plays.length < TRIAL_PLAY_LIMIT - 3;
+        trialEl.textContent = plays.length >= TRIAL_PLAY_LIMIT
+          ? `Trial limit reached (${TRIAL_PLAY_LIMIT} plays). License required to add more.`
+          : `Trial mode: ${TRIAL_PLAY_LIMIT - plays.length} plays remaining.`;
+      }
+    }
   }
 
   // ---- start real-time subscription ----
   unsub = subscribePlays(teamId, game.id, render);
+
+  // Read-only users: render the first report tab immediately
+  if (!canChart) {
+    document.querySelectorAll(".rtab").forEach((b, i) => b.classList.toggle("active", i === 0));
+    renderReportTab("eff");
+  }
 
   // ---- initial effective state ----
   document.getElementById("dist").value = is7 || isScrim ? "" : String(settings.defaultDist);
@@ -2467,7 +2512,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
 
 // ---------- HTML template ----------------------------------------------------
 
-function buildHTML(game, mode) {
+function buildHTML(game, mode, canChart) {
   const is7    = mode === "7v7";
   const isScrim = mode === "scrimmage";
   const title  = game.opponent ? "vs " + esc(game.opponent) : "Untitled game";
@@ -2491,7 +2536,31 @@ function buildHTML(game, mode) {
     </div>
   </header>
 
+  ${!canChart ? `
+  <div id="reportInline" style="background:#fff;display:flex;flex-direction:column;width:100%;border-bottom:1px solid var(--border,#e5e7eb)">
+    <div class="report-head">
+      <h2>Quick Report</h2>
+      <button class="back" id="reportClose" style="background:rgba(0,0,0,.07);border-color:rgba(0,0,0,.15);color:var(--ink)">&#x2715;</button>
+    </div>
+    <div class="report-tabs">
+      <button class="rtab active" data-tab="eff">Most Effective</button>
+      <button class="rtab" data-tab="ineff">Least Effective</button>
+      <button class="rtab" data-tab="call">By Play Call</button>
+      <button class="rtab" data-tab="down">By Down</button>
+      <button class="rtab" data-tab="hash">By Hash</button>
+      <button class="rtab" data-tab="players">Players</button>
+      <button class="rtab" data-tab="stats">Game Stats</button>
+      <button class="rtab" data-tab="heatmap">Heat Map</button>
+      <button class="rtab" data-tab="redzone">Red Zone</button>
+      <button class="rtab" id="rtabSeries" data-tab="series" style="display:none">By Series</button>
+      <button class="rtab" data-tab="notes">Game Notes</button>
+    </div>
+    <div class="report-body" id="reportBody"></div>
+  </div>
+  ` : ""}
+
   <div class="wrap">
+
     <div class="stats" id="stats">
       <div class="stat"><div class="v" id="s-total">0</div><div class="k">Plays</div></div>
       <div class="stat"><div class="v" id="s-run">0</div><div class="k">Runs</div></div>
@@ -2668,7 +2737,12 @@ function buildHTML(game, mode) {
         <button class="puntbtn" id="puntBtn" type="button" hidden>&#8593; Punt</button>
         <button class="cancel" id="cancelEdit" type="button" hidden>Cancel</button>
       </div>
+      <div id="trialPlayWarning" hidden
+        style="margin-top:8px;padding:8px 12px;background:#FEF3C7;border:1px solid #D97706;border-radius:8px;font-size:12px;color:#92400E;text-align:center">
+      </div>
     </section>
+
+    <div class="splits" id="splits"></div>
 
     <div class="log-head">
       <h2>Play log</h2>
@@ -2685,14 +2759,14 @@ function buildHTML(game, mode) {
       </table>
     </div>
 
-    <div class="splits" id="splits"></div>
-
+    ${canChart ? `
     <div class="game-toolbar">
-      <button class="toolbar-btn primary" id="quickReportBtn">&#128203; Quick Report</button>
+      <button class="toolbar-btn" id="quickReportBtn">&#128203; Quick Report</button>
       <button class="toolbar-btn" id="exportCsvBtn">Export CSV</button>
       <button class="toolbar-btn" id="exportHudlBtn">Export for Hudl</button>
       <button class="toolbar-btn" id="printBtn">Print</button>
     </div>
+    ` : ""}
   </div>
 
   <div class="modal-back" id="noteModal" hidden>
@@ -2706,13 +2780,14 @@ function buildHTML(game, mode) {
     </div>
   </div>
 
+  ${canChart ? `
   <div class="modal-back" id="reportOverlay" hidden>
     <div class="report-panel">
       <div class="report-head">
         <h2>Quick Report</h2>
         <div style="display:flex;align-items:center;gap:8px">
-          <button class="back" id="reportPdfBtn" title="Download PDF" style="font-size:13px;padding:4px 10px;border-radius:6px;background:var(--royal);color:#fff;border:none;cursor:pointer;white-space:nowrap">&#11015; Save PDF</button>
-          <button class="back" id="reportClose">&#x2715;</button>
+          <button id="reportPdfBtn" title="Download PDF" style="font-size:13px;padding:6px 14px;border-radius:8px;background:var(--royal);color:#fff;border:none;cursor:pointer;white-space:nowrap;font-family:var(--body);font-weight:600">&#11015; Save PDF</button>
+          <button class="back" id="reportClose" style="background:rgba(0,0,0,.07);border-color:rgba(0,0,0,.15);color:var(--ink)">&#x2715;</button>
         </div>
       </div>
       <div class="report-tabs">
@@ -2731,6 +2806,7 @@ function buildHTML(game, mode) {
       <div class="report-body" id="reportBody"></div>
     </div>
   </div>
+  ` : ""}
 
   <div class="modal-back" id="penaltyModal" hidden>
     <div class="modal">
