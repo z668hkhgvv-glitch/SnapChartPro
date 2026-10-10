@@ -406,6 +406,15 @@ export function exportHudl(plays, game, teamSettings) {
 // ---------- public entry point -----------------------------------------------
 
 export function renderGame(container, user, teamId, game, userRole, teamSettings, onBack, licensed = true) {
+  // Tell main.js we're on the play-entry screen so SW updates are held
+  window.__snapOnPlayScreen = true;
+
+  // Wrap onBack so the flag is cleared and any queued SW update is shown
+  const _onBack = () => {
+    window.__snapLeavePlayScreen?.();
+    onBack();
+  };
+
   // Per-render state
   let plays = [];
   let editingId = null;
@@ -514,7 +523,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   // ---- back button ----
   document.getElementById("gameBackBtn").addEventListener("click", () => {
     if (unsub) unsub();
-    onBack();
+    _onBack();
   });
 
   // ---- End Game / Reopen button (admin only) ----
@@ -1914,7 +1923,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
   document.getElementById("reportClose").addEventListener("click", () => {
     if (!canChart) {
       if (unsub) unsub();
-      onBack();
+      _onBack();
     } else {
       document.getElementById("reportOverlay").hidden = true;
     }

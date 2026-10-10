@@ -45,7 +45,17 @@ if ("serviceWorker" in navigator) {
     try {
       const reg = await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
 
+      // pendingSWWorker holds a waiting SW when an update arrived while the
+      // user was on the play-entry screen. It is shown as soon as they leave.
+      let pendingSWWorker = null;
+
       function offerUpdate(worker) {
+        // Never interrupt play entry — queue and show when back on a safe screen.
+        if (window.__snapOnPlayScreen) {
+          pendingSWWorker = worker;
+          return;
+        }
+        pendingSWWorker = null;
         const toast = document.createElement("div");
         toast.style.cssText = [
           "position:fixed;bottom:24px;left:50%;transform:translateX(-50%)",
@@ -66,6 +76,13 @@ if ("serviceWorker" in navigator) {
           toast.remove();
         });
       }
+
+      // Called by game.js when the user leaves the play-entry screen.
+      // If an update was queued while they were charting, show it now.
+      window.__snapLeavePlayScreen = function() {
+        window.__snapOnPlayScreen = false;
+        if (pendingSWWorker) offerUpdate(pendingSWWorker);
+      };
 
       // New SW already waiting (e.g. hard reload after deploy)
       if (reg.waiting) offerUpdate(reg.waiting);
