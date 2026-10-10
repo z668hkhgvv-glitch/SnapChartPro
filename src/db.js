@@ -28,6 +28,7 @@ import {
   serverTimestamp,
   query,
   orderBy,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase.js";
 
@@ -74,6 +75,17 @@ export async function getGames(teamId) {
     query(collection(db, "teams", teamId, "games"), orderBy("createdAt", "desc"))
   );
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+export async function deleteGame(teamId, gameId) {
+  // Delete all plays in the subcollection first — Firestore does not cascade deletes
+  const playsSnap = await getDocs(
+    collection(db, "teams", teamId, "games", gameId, "plays")
+  );
+  const batch = writeBatch(db);
+  playsSnap.docs.forEach((d) => batch.delete(d.ref));
+  batch.delete(doc(db, "teams", teamId, "games", gameId));
+  await batch.commit();
 }
 
 // ---- Plays ----------------------------------------------------------------

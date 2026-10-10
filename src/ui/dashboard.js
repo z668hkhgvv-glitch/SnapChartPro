@@ -8,7 +8,7 @@
  */
 
 import { logoutCoach } from "../auth.js";
-import { getGames, createGame } from "../db.js";
+import { getGames, createGame, deleteGame } from "../db.js";
 import { renderGame } from "./game.js";
 import { renderSettings } from "./settings.js";
 
@@ -77,7 +77,10 @@ async function refreshGameList(container, user, teamId) {
     <div class="game-card" data-id="${esc(g.id)}">
       <div class="game-card-name">${g.opponent ? "vs " + esc(g.opponent) : "Untitled game"}</div>
       <div class="game-card-meta">${esc(g.date || "")} &middot; ${esc(g.mode || "standard")}</div>
-      <button class="btn-secondary open-game" data-id="${esc(g.id)}">Open</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+        <button class="btn-secondary open-game" data-id="${esc(g.id)}">Open</button>
+        <button class="del-game icon-btn" data-id="${esc(g.id)}" title="Delete game" style="color:#DC2626;font-size:18px;border:none;background:none;cursor:pointer;padding:4px 8px;line-height:1">&times;</button>
+      </div>
     </div>
   `).join("");
 
@@ -85,11 +88,74 @@ async function refreshGameList(container, user, teamId) {
     const game = games.find((g) => g.id === btn.dataset.id);
     btn.addEventListener("click", () => loadGame(container, user, teamId, game));
   });
+
+  list.querySelectorAll(".del-game").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const game = games.find((g) => g.id === btn.dataset.id);
+      const confirmed = await confirmDeleteGame(game);
+      if (!confirmed) return;
+      try {
+        await deleteGame(teamId, btn.dataset.id);
+        await refreshGameList(container, user, teamId);
+      } catch {
+        alert("Could not delete. Please try again.");
+      }
+    });
+  });
 }
 
 function loadGame(container, user, teamId, game) {
   renderGame(container, user, teamId, game, () => {
     renderDashboard(container, user, teamId);
+  });
+}
+
+// Two-step delete confirmation — returns Promise<boolean>
+function confirmDeleteGame(game) {
+  return new Promise((resolve) => {
+    const name = game?.opponent ? `vs ${game.opponent}` : "Untitled game";
+    const date = game?.date ? ` — ${game.date}` : "";
+
+    const overlay = document.createElement("div");
+    overlay.className = "modal-back";
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:400px">
+        <h2 style="color:#DC2626">Delete Game?</h2>
+        <p style="font-weight:600;font-size:15px;margin:8px 0 4px">${esc(name)}${esc(date)}</p>
+        <p style="color:#6b7280;font-size:13px;margin:0 0 20px">
+          All plays in this game will be permanently deleted.
+          This action <strong>cannot be undone</strong>.
+        </p>
+        <div id="delStep1" style="display:flex;gap:10px;justify-content:flex-end">
+          <button id="delCancel1" class="modal-cancel" style="margin:0">Cancel</button>
+          <button id="delNext" style="background:#DC2626;color:#fff;border:none;padding:8px 18px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">Delete Game →</button>
+        </div>
+        <div id="delStep2" style="display:none">
+          <p style="background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;padding:10px 14px;font-size:13px;color:#991B1B;margin:0 0 16px">
+            ⚠️ Second confirmation required. Are you absolutely sure?
+          </p>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button id="delCancel2" class="modal-cancel" style="margin:0">Cancel</button>
+            <button id="delConfirm" style="background:#991B1B;color:#fff;border:none;padding:8px 18px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">Yes, Permanently Delete</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const close = (result) => { document.body.removeChild(overlay); resolve(result); };
+
+    overlay.querySelector("#delCancel1").addEventListener("click", () => close(false));
+    overlay.querySelector("#delCancel2").addEventListener("click", () => close(false));
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(false); });
+
+    overlay.querySelector("#delNext").addEventListener("click", () => {
+      overlay.querySelector("#delStep1").style.display = "none";
+      overlay.querySelector("#delStep2").style.display = "block";
+    });
+
+    overlay.querySelector("#delConfirm").addEventListener("click", () => close(true));
   });
 }
 
