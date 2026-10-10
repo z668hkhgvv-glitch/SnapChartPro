@@ -90,7 +90,7 @@ export async function renderDashboard(container, user, teamId, userRole, onRefre
           </svg>
         </div>
         <div class="dash-header-right">
-          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.5.6</span>
+          <span class="appversion" style="font-family:var(--num);font-size:11px;font-weight:600;color:rgba(255,255,255,0.5);letter-spacing:.04em;margin-right:4px">1.5.7</span>
           <span class="coach-email" id="headerTeamName">&hellip;</span>
           <span class="role-badge role-${esc(userRole)}">${roleName(userRole)}</span>
           ${isAdmin
@@ -270,7 +270,9 @@ async function refreshGameList(container, user, teamId, userRole, onRefresh, lic
     list.querySelectorAll(".del-game").forEach((btn) => {
       btn.addEventListener("click", async (e) => {
         e.stopPropagation();
-        if (!confirm("Delete this game and all its plays? This can't be undone.")) return;
+        const game = games.find((g) => g.id === btn.dataset.id);
+        const confirmed = await confirmDeleteGame(game);
+        if (!confirmed) return;
         try {
           await deleteGame(teamId, btn.dataset.id);
           await refreshGameList(container, user, teamId, userRole, onRefresh);
@@ -297,6 +299,54 @@ function dateFromISO(iso) {
   const d = new Date(iso + "T12:00:00"); // noon avoids DST/timezone shift
   if (isNaN(d)) return iso;
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+// Two-step delete confirmation — returns Promise<boolean>
+function confirmDeleteGame(game) {
+  return new Promise((resolve) => {
+    const name = game?.opponent ? `vs ${game.opponent}` : "Untitled game";
+    const date = game?.date ? ` — ${game.date}` : "";
+
+    const overlay = document.createElement("div");
+    overlay.className = "modal-back";
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:400px">
+        <h2 style="color:#DC2626">Delete Game?</h2>
+        <p style="font-weight:600;font-size:15px;margin:8px 0 4px">${esc(name)}${esc(date)}</p>
+        <p style="color:#6b7280;font-size:13px;margin:0 0 20px">
+          All plays in this game will be permanently deleted.
+          This action <strong>cannot be undone</strong>.
+        </p>
+        <div id="delStep1" style="display:flex;gap:10px;justify-content:flex-end">
+          <button id="delCancel1" class="btn-ghost">Cancel</button>
+          <button id="delNext" style="background:#DC2626;color:#fff;border:none;padding:8px 18px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">Delete Game →</button>
+        </div>
+        <div id="delStep2" style="display:none">
+          <p style="background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;padding:10px 14px;font-size:13px;color:#991B1B;margin:0 0 16px">
+            ⚠️ Second confirmation required. Are you absolutely sure?
+          </p>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button id="delCancel2" class="btn-ghost">Cancel</button>
+            <button id="delConfirm" style="background:#991B1B;color:#fff;border:none;padding:8px 18px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer">Yes, Permanently Delete</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const close = (result) => { document.body.removeChild(overlay); resolve(result); };
+
+    overlay.querySelector("#delCancel1").addEventListener("click", () => close(false));
+    overlay.querySelector("#delCancel2").addEventListener("click", () => close(false));
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(false); });
+
+    overlay.querySelector("#delNext").addEventListener("click", () => {
+      overlay.querySelector("#delStep1").style.display = "none";
+      overlay.querySelector("#delStep2").style.display = "block";
+    });
+
+    overlay.querySelector("#delConfirm").addEventListener("click", () => close(true));
+  });
 }
 
 function showEditGameModal(game, teamId, onSaved) {
