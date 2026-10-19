@@ -62,7 +62,21 @@ service cloud.firestore {
       allow read, write: if signedIn() && request.auth.uid == uid;
     }
 
-    // ── teams/{teamId} — team root document ──────────────────────────────────
+    // ── Free-app users: teamId == uid (no member docs) ──────────────────────
+    // The free app stores each user's data under teams/{uid}/*, so teamId IS
+    // the owner's uid. These rules sit alongside the Pro rules and are OR'd.
+
+    match /teams/{teamId} {
+      allow read, write: if signedIn() && request.auth.uid == teamId;
+      match /games/{gameId} {
+        allow read, write: if signedIn() && request.auth.uid == teamId;
+        match /plays/{playId} {
+          allow read, write: if signedIn() && request.auth.uid == teamId;
+        }
+      }
+    }
+
+    // ── teams/{teamId} — team root document (Pro app, member-based) ──────────
 
     match /teams/{teamId} {
       allow read:   if isMember(teamId);

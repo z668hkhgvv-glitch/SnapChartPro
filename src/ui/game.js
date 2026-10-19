@@ -561,7 +561,28 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       if (after) after();
     });
   }
-  wireSeg("qtr",   "qtr");
+  // Custom qtr wiring — detects Q2→Q3 (halftime) and resets drive state
+  {
+    const qtrBox = document.getElementById("qtr");
+    if (qtrBox) {
+      qtrBox.addEventListener("click", (e) => {
+        const btn = e.target.closest("button");
+        if (!btn) return;
+        const prevQtr = draft.qtr;
+        Array.from(qtrBox.children).forEach((c) => c.classList.remove("on"));
+        btn.classList.add("on");
+        draft.qtr = btn.getAttribute("data-v");
+        if (prevQtr === "2" && draft.qtr === "3") {
+          draft.down = "1";
+          setSeg("down", "1");
+          document.getElementById("dist").value = settings.defaultDist || "10";
+          document.getElementById("yl").value = "";
+          draft.hash = "";
+          setSeg("hash", "");
+        }
+      });
+    }
+  }
   wireSeg("hash",  "hash");
   wireSeg("ptype", "type", () => { updatePlayerFieldVisibility(draft.type); paintPuntBtn(); });
   wireSeg("down",  "down", () => { refreshAutoEff(); update7v7Hint(); paintPuntBtn(); });
@@ -905,7 +926,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
         <div class="rpt-label"><b>#${esc(pl.jersey)}</b> ${esc(pl.name)} <span style="font-size:11px;color:var(--slate)">${esc(pl.pos)}</span></div>
         <div class="rpt-stats">
           <span class="rpt-n">${n} ${countLabel}</span>
-          <span class="rpt-avg">${avg} yds</span>
+          <span class="rpt-avg">${stat.yds} yds &middot; ${avg} avg</span>
           <span class="rpt-eff" style="color:${rate>=50?"#15803d":"#b91c1c"}">${rate}% eff</span>
         </div>
         <div class="rpt-bar-wrap"><div class="rpt-bar" style="width:${rate}%"></div></div>
@@ -961,7 +982,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
               <div class="rpt-label"><b>#${esc(pl.jersey)}</b> ${esc(pl.name)} <span style="font-size:11px;color:var(--slate)">${esc(pl.pos)}</span></div>
               <div class="rpt-stats">
                 <span class="rpt-n">${s.n} plays</span>
-                <span class="rpt-avg">${avg} yds</span>
+                <span class="rpt-avg">${s.yds} yds &middot; ${avg} avg</span>
                 <span class="rpt-eff" style="color:${rate>=50?"#15803d":"#b91c1c"}">${rate}% eff</span>
               </div>
               <div class="rpt-bar-wrap"><div class="rpt-bar" style="width:${rate}%"></div></div>
