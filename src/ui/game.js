@@ -158,7 +158,28 @@ export function renderGame(container, user, teamId, game, onBack) {
       if (after) after();
     });
   }
-  wireSeg("qtr",   "qtr");
+  // Custom qtr wiring — detects Q2→Q3 (halftime) and resets drive state
+  {
+    const qtrBox = document.getElementById("qtr");
+    if (qtrBox) {
+      qtrBox.addEventListener("click", (e) => {
+        const btn = e.target.closest("button");
+        if (!btn) return;
+        const prevQtr = draft.qtr;
+        Array.from(qtrBox.children).forEach((c) => c.classList.remove("on"));
+        btn.classList.add("on");
+        draft.qtr = btn.getAttribute("data-v");
+        if (prevQtr === "2" && draft.qtr === "3") {
+          draft.down = "1";
+          setSeg("down", "1");
+          document.getElementById("dist").value = settings.defaultDist || "10";
+          document.getElementById("yl").value = "";
+          draft.hash = "";
+          setSeg("hash", "");
+        }
+      });
+    }
+  }
   wireSeg("hash",  "hash");
   wireSeg("ptype", "type");
   wireSeg("down",  "down", () => { refreshAutoEff(); update7v7Hint(); });

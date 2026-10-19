@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "sidelinelabz-preview",
     "public": "dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [{ "source": "**", "destination": "/index.html" }],
@@ -17,8 +18,5 @@
         ]
       }
     ]
-  },
-  "firestore": {
-    "rules": "firestore.rules"
   }
 }
