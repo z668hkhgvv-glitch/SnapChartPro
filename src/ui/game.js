@@ -922,7 +922,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       const n = stat[countKey] || 1;
       const rate = Math.round(100 * stat.eff / n);
       const avg = (stat.yds / n).toFixed(1);
-      return `<div class="rpt-row">
+      return `<div class="rpt-row" data-player-drill="${esc(stat.id)}" style="cursor:pointer">
         <div class="rpt-label"><b>#${esc(pl.jersey)}</b> ${esc(pl.name)} <span style="font-size:11px;color:var(--slate)">${esc(pl.pos)}</span></div>
         <div class="rpt-stats">
           <span class="rpt-n">${n} ${countLabel}</span>
@@ -950,18 +950,22 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       html += rushers.map(s => playerRow(s, "car", "carries")).join("");
     }
 
-    // By play call
+    // By play call — track every player involved (passer + receiver + rusher separately)
     const callPlayer = {};
     plays.forEach(p => {
       const callKey = (p.call || "").trim();
       if (!callKey) return;
-      const pid = p.passer || p.rusher || p.receiver;
-      if (!pid || !rosterMap[pid]) return;
-      const k = callKey + "|||" + pid;
-      if (!callPlayer[k]) callPlayer[k] = {call: callKey, id: pid, n: 0, yds: 0, eff: 0};
-      callPlayer[k].n++;
-      callPlayer[k].yds += Number(p.yards) || 0;
-      if (p.success) callPlayer[k].eff++;
+      const addCallStat = (pid, role) => {
+        if (!pid || !rosterMap[pid]) return;
+        const k = `${callKey}|||${pid}|||${role}`;
+        if (!callPlayer[k]) callPlayer[k] = {call: callKey, id: pid, role, n: 0, yds: 0, eff: 0};
+        callPlayer[k].n++;
+        callPlayer[k].yds += Number(p.yards) || 0;
+        if (p.success) callPlayer[k].eff++;
+      };
+      addCallStat(p.passer,   "Passer");
+      addCallStat(p.receiver, "Receiver");
+      addCallStat(p.rusher,   "Rusher");
     });
     const byCal = {};
     Object.values(callPlayer).forEach(item => {
@@ -972,14 +976,14 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     if (callKeys.length) {
       html += '<div class="report-section-head">By play call</div>';
       callKeys.sort().forEach(callKey => {
-        const items = byCal[callKey].sort((a,b)=>(b.eff/b.n)-(a.eff/a.n));
+        const items = byCal[callKey].sort((a,b) => (b.eff/b.n) - (a.eff/a.n));
         html += `<div class="rpt-group-label">${esc(callKey)}</div>` +
           items.map(s => {
             const pl = rosterMap[s.id];
-            const rate = Math.round(100*s.eff/s.n);
-            const avg = (s.yds/s.n).toFixed(1);
-            return `<div class="rpt-row" style="padding-left:14px">
-              <div class="rpt-label"><b>#${esc(pl.jersey)}</b> ${esc(pl.name)} <span style="font-size:11px;color:var(--slate)">${esc(pl.pos)}</span></div>
+            const rate = Math.round(100 * s.eff / s.n);
+            const avg = (s.yds / s.n).toFixed(1);
+            return `<div class="rpt-row" data-player-drill="${esc(s.id)}" style="padding-left:14px;cursor:pointer">
+              <div class="rpt-label"><b>#${esc(pl.jersey)}</b> ${esc(pl.name)} <span style="font-size:11px;color:var(--slate)">${esc(s.role)}</span></div>
               <div class="rpt-stats">
                 <span class="rpt-n">${s.n} plays</span>
                 <span class="rpt-avg">${s.yds} yds &middot; ${avg} avg</span>
@@ -2083,6 +2087,35 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       document.getElementById("reportBody").innerHTML = buildHeatMap(plays, hmFilter);
       return;
     }
+    const playerRow = e.target.closest("[data-player-drill]");
+    if (playerRow) {
+      const pid = playerRow.getAttribute("data-player-drill");
+      const rosterMap = {};
+      (teamSettings.roster || []).forEach(r => rosterMap[r.id] = r);
+      const pl = rosterMap[pid];
+      document.getElementById("drillTitle").textContent = pl ? `#${pl.jersey} ${pl.name}` : "Player";
+      document.getElementById("drillBody").innerHTML = buildPlayerDrillDown(pid);
+      document.getElementById("drillModal").hidden = false;
+      return;
+    }
+    const downRow = e.target.closest("[data-down-drill]");
+    if (downRow) {
+      const down = downRow.getAttribute("data-down-drill");
+      const suf = down === "1" ? "st" : down === "2" ? "nd" : down === "3" ? "rd" : "th";
+      document.getElementById("drillTitle").textContent = `${down}${suf} Down — All Plays`;
+      document.getElementById("drillBody").innerHTML = buildDownDrillDown(down);
+      document.getElementById("drillModal").hidden = false;
+      return;
+    }
+    const hashRow = e.target.closest("[data-hash-drill]");
+    if (hashRow) {
+      const hash = hashRow.getAttribute("data-hash-drill");
+      const hashLabels = { L: "Left Hash", M: "Middle", R: "Right Hash" };
+      document.getElementById("drillTitle").textContent = `${hashLabels[hash] || hash} — All Plays`;
+      document.getElementById("drillBody").innerHTML = buildHashDrillDown(hash);
+      document.getElementById("drillModal").hidden = false;
+      return;
+    }
     const row = e.target.closest("[data-drill]");
     if (!row) return;
     const callName = row.getAttribute("data-drill");
@@ -2131,12 +2164,13 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       return Object.values(map);
     }
 
-    function rptRow(label, n, succ, yards, drillKey) {
+    function rptRow(label, n, succ, yards, drillKey, extraAttr = "") {
       const effPct = n ? Math.round(100 * succ / n) : 0;
       const avg    = n ? (yards / n).toFixed(1) : "0.0";
       const color  = effPct >= 50 ? "#15803d" : "#b91c1c";
-      const drillAttr = drillKey ? ` data-drill="${esc(drillKey)}" style="cursor:pointer"` : "";
-      return `<div class="rpt-row"${drillAttr}>
+      const drillAttr = drillKey ? ` data-drill="${esc(drillKey)}"` : "";
+      const clickable = (drillKey || extraAttr) ? ` style="cursor:pointer"` : "";
+      return `<div class="rpt-row"${drillAttr}${extraAttr ? " " + extraAttr : ""}${clickable}>
         <div class="rpt-label">${esc(label)}</div>
         <div class="rpt-stats">
           <span class="rpt-n">${n} play${n !== 1 ? "s" : ""}</span>
@@ -2172,7 +2206,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
         });
         const arr = Object.values(map).sort((a, b) => b.n - a.n);
         return `<div class="rpt-group-head">${label}</div>` +
-          arr.map((g) => rptRow(g.key, g.n, g.succ, g.yards)).join("");
+          arr.map((g) => rptRow(g.key, g.n, g.succ, g.yards, g.key)).join("");
       }
       html = typeSection("Run Plays", plays.filter((p) => p.type === "run")) +
              typeSection("Pass Plays", plays.filter((p) => p.type === "pass")) +
@@ -2187,7 +2221,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
         const succ  = sub.filter((p) => p.success).length;
         const yards = sub.reduce((s, p) => s + (Number(p.yards) || 0), 0);
         const suf   = d === 1 ? "st" : d === 2 ? "nd" : d === 3 ? "rd" : "th";
-        return rptRow(`${d}${suf} Down`, sub.length, succ, yards);
+        return rptRow(`${d}${suf} Down`, sub.length, succ, yards, null, `data-down-drill="${d}"`);
       }).filter(Boolean).join("");
       if (!html) html = '<div class="report-empty">No plays with down data.</div>';
     }
@@ -2199,7 +2233,7 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
         if (!sub.length) return "";
         const succ  = sub.filter((p) => p.success).length;
         const yards = sub.reduce((s, p) => s + (Number(p.yards) || 0), 0);
-        return rptRow(labels[h], sub.length, succ, yards);
+        return rptRow(labels[h], sub.length, succ, yards, null, `data-hash-drill="${h}"`);
       }).filter(Boolean).join("");
       if (!html) html = '<div class="report-empty">No plays with hash data.</div>';
     }
@@ -2341,6 +2375,119 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
 
     return statsHtml + playerSection + `<div class="table-scroll"><table><thead><tr>
       <th>#</th><th>Qtr/Ser</th><th>Dn &amp; Dist</th><th>Ball On</th><th>Formation</th><th>Tags</th><th>Yds</th><th>Eff</th>
+    </tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  // ---- player drill-down: all plays for a specific player ----
+  function buildPlayerDrillDown(pid) {
+    const rosterMap = {};
+    (teamSettings.roster || []).forEach(r => rosterMap[r.id] = r);
+    // Collect every play this player appeared in, noting their role each time
+    const matching = [];
+    plays.forEach(p => {
+      const roles = [];
+      if (p.passer   === pid) roles.push("Passer");
+      if (p.receiver === pid) roles.push("Receiver");
+      if (p.rusher   === pid) roles.push("Rusher");
+      if (roles.length) matching.push({ ...p, _roles: roles });
+    });
+    if (!matching.length) return '<div class="report-empty">No plays logged for this player yet.</div>';
+    const total    = matching.length;
+    const effCount = matching.filter(p => p.success).length;
+    const totalYds = matching.reduce((a, p) => a + (Number(p.yards) || 0), 0);
+    const rate     = Math.round(100 * effCount / total);
+    const avgYds   = (totalYds / total).toFixed(1);
+    const statsHtml = `<div class="drill-stats">
+      <span><b>${total}</b>plays</span>
+      <span><b>${effCount}/${total}</b>effective</span>
+      <span><b>${rate}%</b>success rate</span>
+      <span><b>${totalYds >= 0 ? "+" : ""}${totalYds}</b>total yds &middot; <b>${avgYds}</b>avg</span>
+    </div>`;
+    const rows = matching.map((p, i) => {
+      const dir  = p.yards > 0 ? "up" : p.yards < 0 ? "down" : "flat";
+      const sign = p.yards > 0 ? "+" : "";
+      const ctx  = p.mode === "scrimmage" ? `Ser ${esc(p.series || "")}` : `Q${esc(p.qtr || "")}`;
+      return `<tr>
+        <td><b style="font-family:var(--num)">${i + 1}</b></td>
+        <td>${ctx}</td>
+        <td><b style="font-family:var(--num)">${dnDist(p)}</b></td>
+        <td>${esc(p.call || "—")}</td>
+        <td><span style="font-size:11px;color:var(--slate)">${p._roles.map(esc).join(", ")}</span></td>
+        <td><span class="res ${dir}">${sign}${Number(p.yards)||0}</span></td>
+        <td><span class="succ ${p.success ? "y" : "n"} static">${p.success ? "✓" : "✗"}</span></td>
+      </tr>`;
+    }).join("");
+    return statsHtml + `<div class="table-scroll"><table><thead><tr>
+      <th>#</th><th>Qtr/Ser</th><th>Dn &amp; Dist</th><th>Play Call</th><th>Role</th><th>Yds</th><th>Eff</th>
+    </tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  // ---- down drill-down: all plays for a specific down ----
+  function buildDownDrillDown(down) {
+    const matching = plays.filter(p => String(p.down) === String(down));
+    if (!matching.length) return '<div class="report-empty">No plays logged for this down yet.</div>';
+    const total    = matching.length;
+    const effCount = matching.filter(p => p.success).length;
+    const totalYds = matching.reduce((a, p) => a + (Number(p.yards) || 0), 0);
+    const rate     = Math.round(100 * effCount / total);
+    const avgYds   = (totalYds / total).toFixed(1);
+    const statsHtml = `<div class="drill-stats">
+      <span><b>${total}</b>plays</span>
+      <span><b>${effCount}/${total}</b>effective</span>
+      <span><b>${rate}%</b>success rate</span>
+      <span><b>${totalYds >= 0 ? "+" : ""}${totalYds}</b>total yds &middot; <b>${avgYds}</b>avg</span>
+    </div>`;
+    const rows = matching.map((p, i) => {
+      const dir  = p.yards > 0 ? "up" : p.yards < 0 ? "down" : "flat";
+      const sign = p.yards > 0 ? "+" : "";
+      const ctx  = p.mode === "scrimmage" ? `Ser ${esc(p.series || "")}` : `Q${esc(p.qtr || "")}`;
+      return `<tr>
+        <td><b style="font-family:var(--num)">${i + 1}</b></td>
+        <td>${ctx}</td>
+        <td>${esc(p.call || "—")}</td>
+        <td>${p.yl != null && p.yl !== "" ? esc(String(p.yl)) : "&ndash;"}<span style="color:var(--slate);font-size:11px"> ${esc(p.hash || "")}</span></td>
+        <td>${esc(p.form || "—")}</td>
+        <td><span class="res ${dir}">${sign}${Number(p.yards)||0}</span></td>
+        <td><span class="succ ${p.success ? "y" : "n"} static">${p.success ? "✓" : "✗"}</span></td>
+      </tr>`;
+    }).join("");
+    return statsHtml + `<div class="table-scroll"><table><thead><tr>
+      <th>#</th><th>Qtr/Ser</th><th>Play Call</th><th>Ball On</th><th>Formation</th><th>Yds</th><th>Eff</th>
+    </tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  // ---- hash drill-down: all plays for a specific hash ----
+  function buildHashDrillDown(hash) {
+    const matching = plays.filter(p => p.hash === hash);
+    if (!matching.length) return '<div class="report-empty">No plays logged for this hash yet.</div>';
+    const total    = matching.length;
+    const effCount = matching.filter(p => p.success).length;
+    const totalYds = matching.reduce((a, p) => a + (Number(p.yards) || 0), 0);
+    const rate     = Math.round(100 * effCount / total);
+    const avgYds   = (totalYds / total).toFixed(1);
+    const statsHtml = `<div class="drill-stats">
+      <span><b>${total}</b>plays</span>
+      <span><b>${effCount}/${total}</b>effective</span>
+      <span><b>${rate}%</b>success rate</span>
+      <span><b>${totalYds >= 0 ? "+" : ""}${totalYds}</b>total yds &middot; <b>${avgYds}</b>avg</span>
+    </div>`;
+    const rows = matching.map((p, i) => {
+      const dir  = p.yards > 0 ? "up" : p.yards < 0 ? "down" : "flat";
+      const sign = p.yards > 0 ? "+" : "";
+      const ctx  = p.mode === "scrimmage" ? `Ser ${esc(p.series || "")}` : `Q${esc(p.qtr || "")}`;
+      return `<tr>
+        <td><b style="font-family:var(--num)">${i + 1}</b></td>
+        <td>${ctx}</td>
+        <td><b style="font-family:var(--num)">${dnDist(p)}</b></td>
+        <td>${esc(p.call || "—")}</td>
+        <td>${p.yl != null && p.yl !== "" ? esc(String(p.yl)) : "&ndash;"}</td>
+        <td>${esc(p.form || "—")}</td>
+        <td><span class="res ${dir}">${sign}${Number(p.yards)||0}</span></td>
+        <td><span class="succ ${p.success ? "y" : "n"} static">${p.success ? "✓" : "✗"}</span></td>
+      </tr>`;
+    }).join("");
+    return statsHtml + `<div class="table-scroll"><table><thead><tr>
+      <th>#</th><th>Qtr/Ser</th><th>Dn &amp; Dist</th><th>Play Call</th><th>Ball On</th><th>Formation</th><th>Yds</th><th>Eff</th>
     </tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
