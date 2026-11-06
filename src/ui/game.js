@@ -1917,9 +1917,13 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
     if (!row) return;
     const call = row.getAttribute("data-call");
     const type = row.getAttribute("data-type");
+    const form = row.getAttribute("data-form");
     // Pre-fill play call
     const inpCall = document.getElementById("call");
     if (inpCall) inpCall.value = call;
+    // Pre-fill formation
+    const inpForm = document.getElementById("form");
+    if (inpForm && form) inpForm.value = form;
     // Pre-fill play type via segmented control (ptype buttons)
     const ptypeBox = document.getElementById("ptype");
     if (ptypeBox) {
@@ -2535,7 +2539,26 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
       const typeCounts = {};
       g.plays.forEach((p) => { const t = p.type || "run"; typeCounts[t] = (typeCounts[t] || 0) + 1; });
       const type = Object.keys(typeCounts).sort((a, b) => typeCounts[b] - typeCounts[a])[0] || "run";
-      return { call: g.call, n, succ, yards, effPct, avg, type };
+      // Best formation: highest success rate among formations used with this call (min 1 play)
+      const formMap = {};
+      g.plays.forEach((p) => {
+        const f = (p.form || "").trim();
+        if (!f) return;
+        if (!formMap[f]) formMap[f] = { n: 0, succ: 0 };
+        formMap[f].n++;
+        if (p.success) formMap[f].succ++;
+      });
+      const formEntries = Object.entries(formMap);
+      let bestForm = "";
+      let bestFormEff = -1;
+      formEntries.forEach(([f, s]) => {
+        const e = s.succ / s.n;
+        if (e > bestFormEff || (e === bestFormEff && s.n > (formMap[bestForm] || {n:0}).n)) {
+          bestFormEff = e;
+          bestForm = f;
+        }
+      });
+      return { call: g.call, n, succ, yards, effPct, avg, type, bestForm };
     });
 
     // Sort by effPct desc, then n desc
@@ -2546,8 +2569,11 @@ export function renderGame(container, user, teamId, game, userRole, teamSettings
 
     const rowsHtml = top.map((r) => {
       const color = r.effPct >= 50 ? "#15803d" : "#b91c1c";
-      return `<div class="rpt-row suggest-pick" data-call="${esc(r.call)}" data-type="${esc(r.type)}" style="cursor:pointer">
-        <div class="rpt-label">${esc(r.call)} <span style="font-size:11px;color:var(--slate)">&middot; ${esc(r.type)} &middot; ${r.n} play${r.n !== 1 ? "s" : ""}</span></div>
+      const formHtml = r.bestForm
+        ? `<span style="font-size:11px;background:var(--chalk,#E8EEF9);color:var(--royal,#16317F);border-radius:4px;padding:1px 6px;margin-left:6px;font-weight:600">&#x25BA; ${esc(r.bestForm)}</span>`
+        : "";
+      return `<div class="rpt-row suggest-pick" data-call="${esc(r.call)}" data-type="${esc(r.type)}" data-form="${esc(r.bestForm)}" style="cursor:pointer">
+        <div class="rpt-label">${esc(r.call)} <span style="font-size:11px;color:var(--slate)">&middot; ${esc(r.type)} &middot; ${r.n} play${r.n !== 1 ? "s" : ""}</span>${formHtml}</div>
         <div class="rpt-stats">
           <span class="rpt-avg">${r.avg} yds/play</span>
           <span class="rpt-eff" style="color:${color}">${r.effPct}% effective</span>
